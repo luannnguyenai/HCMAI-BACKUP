@@ -1,0 +1,61 @@
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+.cursor/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.env
+.env.local
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Data / artefacts that should never be committed
+data/raw/
+data/intermediate/
+data/embeddings/
+data/indexes/
+*.parquet
+*.duckdb
+*.sqlite
+*.db
+eval-results/
+experiments/*/checkpoints/
+
+# Model weights (track via download scripts, not commit)
+weights/
+checkpoints/
+*.safetensors
+*.bin
+*.gguf
+*.onnx
+*.pt
+*.pth
+
+# Logs
+logs/
+*.log
+
+# Build outputs
+dist/
+build/
+node_modules/
+
+# Local secrets
+secrets/
+*.pem
+*.key
