@@ -43,6 +43,7 @@ docs/
     05-evaluation-harness.md
     06-ui-ux-design.md
     07-approaches-catalog.md         # all considered approaches, chosen vs skipped
+    08-original-contributions.md     # what is actually novel in our system (vs reused SOTA)
   papers/                            # 37 downloaded reference papers
     foundation-vlm/                  # SigLIP-2, Meta CLIP 2, EVA-CLIP, CLIP, ...
     lsc-systems/                     # LSC review, MERVIN, QUEST-DANTE, EEIoT...
@@ -55,15 +56,19 @@ docs/
 
 ## At-a-glance strategy
 
-### Winning hypothesis
-Four advantages stacked together:
-1. **Vietnamese-native multimodal stack** (Meta CLIP 2 + Vintern + PhoWhisper + PaddleOCR/VietOCR + BGE-M3)
-2. **3-model image-text ensemble** with RRF fusion in Milvus hybrid index
-3. **LLM-driven planner** (SeaLLMs-v3 / Gemini Flash) that drives both interactive and automatic tracks
-4. **Speed-optimised UX** with keyframe scrubbing, temporal `q1 < q2`, TRAKE drag-drop palette, and a submission-verification panel
+### Winning hypothesis - floor, edge, moat
+
+**Floor (table stakes - reproduces the 2026 LSC/VBS finalist line):** a Vietnamese-capable multimodal stack (Meta CLIP 2 + SigLIP-2 + InternVideo2 + Vintern-3B-beta + PhoWhisper + PaddleOCR/VietOCR + BGE-M3 in Milvus + Elasticsearch), driven by an LLM planner (SeaLLMs-v3 / Gemini Flash) and a VLM-as-judge reranker. This mirrors patterns from MEMORIA (LSC'25), NII-UIT (VBS'25), and SnapMind (MMM 2026). Necessary but not sufficient - every serious 2026 team will land near here.
+
+**Edge (three original contributions on top of the floor)** - see [`docs/proposals/08-original-contributions.md`](docs/proposals/08-original-contributions.md):
+1. **DiacriticBERT** - a Vietnamese late-interaction head trained on a controlled diacritic-noise distribution. Targets the systematic ASR/OCR failure mode that off-the-shelf BGE-M3 ignores.
+2. **Per-task-type learned fusion** - replaces the 2009-vintage RRF k=60 default with a per-task LambdaRank model that knows when to favour image-text vs OCR vs ASR. Auto-falls back to RRF if it regresses.
+3. **Agent self-distillation** - the interactive-track operator's traces become the training corpus for the automatic-track planner via DSPy. This pattern only exists because 2026 is the first year the automatic track is a serious sub-event.
+
+**Moat (process, not technology):** aggressive operator drills (>=20% of prep time) and a submission-verification panel. PraK1 vs PraK2 differed by 30 points on the same engine; operator skill is the documented lever.
 
 ### Architecture in one paragraph
-Offline: TransNetV2 shot detection -> keyframes -> three image encoders (SigLIP-2, Meta CLIP 2, InternVideo2-1B) into Milvus; PaddleOCR/VietOCR + PhoWhisper into Elasticsearch with BGE-M3 dense+sparse heads; YOLO/Places365/LSC-ADL labels as structured filters. Online: planner LLM parses Vietnamese query into a DAG of tool calls, runs in parallel, RRF-fuses, applies structured filters, optionally runs DANTE DP for TRAKE, reranks via Vintern-3B-beta VLM-as-judge, displays top-10 in a React UI; operator confirms via submission-verification bar.
+Offline: TransNetV2 shot detection -> keyframes -> three image encoders (SigLIP-2, Meta CLIP 2, InternVideo2-1B) into Milvus; PaddleOCR/VietOCR + PhoWhisper into Elasticsearch with BGE-M3 dense+sparse heads + a **DiacriticBERT late-interaction head** (our contribution); YOLO/Places365/LSC-ADL labels as structured filters. Online: planner LLM parses the Vietnamese query into a DAG of tool calls, runs in parallel, applies **per-task-type learned fusion** (RRF k=60 fallback), applies structured filters, optionally runs DANTE DP for TRAKE, reranks via Vintern-3B-beta VLM-as-judge, displays top-10 in a React UI; operator confirms via submission-verification bar. The same engine runs the automatic track driven by a planner **distilled from the operator's own traces**.
 
 ### Timeline
 | Phase | Weeks | Goal |
@@ -88,17 +93,21 @@ Offline: TransNetV2 shot detection -> keyframes -> three image encoders (SigLIP-
 | VLM reranker | Vintern-3B-beta + Gemini 2.5 Flash | BLIP-2 ITM head |
 | Planner LLM | SeaLLMs-v3-7B (local) + Gemini 2.5 Flash | Vistral-7B-FC |
 | Agent framework | LangGraph + DSPy | smolagents |
+| **Ranker fusion** | **Per-task-type LambdaRank (ours, C2)** | **RRF k=60 (auto-fallback)** |
+| **Diacritic robustness** | **DiacriticBERT late-interaction head (ours, C1)** | SeaLLMs-v3 query rewriting |
+| **Auto-track planner training** | **DSPy self-distillation on operator traces (ours, C4)** | Zero-shot SeaLLMs-v3 |
 | UI | React + Tailwind + shadcn/ui | -- |
 
 ## Reading order if you're new to the team
 
 1. [`docs/strategy/00-master-strategy.md`](docs/strategy/00-master-strategy.md)
-2. [`docs/research-notes/01-aic-hcmc-prior-editions.md`](docs/research-notes/01-aic-hcmc-prior-editions.md)
-3. [`docs/research-notes/02-lsc-vbs-systems-deep-dive.md`](docs/research-notes/02-lsc-vbs-systems-deep-dive.md)
-4. [`docs/proposals/01-interactive-system-architecture.md`](docs/proposals/01-interactive-system-architecture.md)
-5. [`docs/proposals/02-automatic-track-agent.md`](docs/proposals/02-automatic-track-agent.md)
-6. The rest in `docs/proposals/` and `docs/research-notes/` as you implement.
-7. Skim abstracts in `docs/papers/` before deep-reading any one.
+2. [`docs/proposals/08-original-contributions.md`](docs/proposals/08-original-contributions.md) - what is *actually* novel in our system vs the reused 2026 SOTA floor; read this before you internalise the rest as "the plan"
+3. [`docs/research-notes/01-aic-hcmc-prior-editions.md`](docs/research-notes/01-aic-hcmc-prior-editions.md)
+4. [`docs/research-notes/02-lsc-vbs-systems-deep-dive.md`](docs/research-notes/02-lsc-vbs-systems-deep-dive.md)
+5. [`docs/proposals/01-interactive-system-architecture.md`](docs/proposals/01-interactive-system-architecture.md)
+6. [`docs/proposals/02-automatic-track-agent.md`](docs/proposals/02-automatic-track-agent.md)
+7. The rest in `docs/proposals/` and `docs/research-notes/` as you implement.
+8. Skim abstracts in `docs/papers/` before deep-reading any one.
 
 ## How to contribute
 

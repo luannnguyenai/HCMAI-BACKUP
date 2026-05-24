@@ -49,15 +49,21 @@ Reference: `docs/proposals/02-automatic-track-agent.md`.
 
 ![Winning Stack](aic2026-winning-stack.png)
 
-What this shows: the four stacked advantages we believe will win 1st prize, with notional cumulative gains.
+What this shows: the **floor / edge / moat** framing of the winning hypothesis (regenerated May 24, 2026 after the strategy audit).
+
+- **Tier 1 (Floor - bottom, muted slate-gray)**: reproduced 2026 SOTA stack. Meta CLIP 2 + SigLIP-2 + InternVideo2-1B + Vintern-3B + PhoWhisper + PaddleOCR/VietOCR + BGE-M3 in Milvus + Elasticsearch, DANTE for TRAKE, LLM planner + VLM-as-judge, speed UX. Tagged "necessary, not sufficient" — every serious 2026 team will land near this floor.
+- **Tier 2 (Edge - middle, three vibrant emerald bars)**: our three original contributions. C1 DiacriticBERT (+2-5% R@1 est. on OCR/ASR slice), C2 Per-task Learned Fusion (+1-3% NDCG@10 est., replaces RRF k=60), C4 Agent Self-Distillation (+10-20% R@1 est. on automatic track via DSPy on operator traces).
+- **Tier 3 (Moat - top, warm copper)**: operator drills + verification panel. Process advantage, not technology. PraK1 vs PraK2 = 30 pts on the same engine.
+- **Podium base**: AIC2026 1st Prize, Bảng A.
+
+Lift numbers are explicitly marked as Phase-2 ablation estimates in the bottom-right footnote. They become real once `eval/diacritic_robustness.py`, `eval/fusion_ablation.py`, and `eval/agent_automatic_ablation.py` (proposal 05 SS 13-15) start producing nightly numbers in Phase 2.
 
 Discussion prompts for the team:
-- The "+5% / +7% / +10% / -12s" numbers are **placeholders** - we need to replace them with real numbers from the eval harness in Phase 2.
-- Did we miss an advantage? E.g. "synthetic-caption fine-tuning" or "Vietnamese transcript-cleanup" could each be its own tier.
-- Is "operator drills" really the right framing for the bottom tier, or should it be "UX latency" alone?
-- This is the slide we present to organisers / press if we win. Get the visual right before September.
+- Replace the estimated lift pills with real numbers from the eval harness once Phase 2 ablations have at least 3 stable nightly runs.
+- If any of {C1, C2, C4} fails its ship gate, redraw that bar in muted gray with the "shipped fallback" label (RRF for C2, SeaLLMs-v3 query-rewrite for C1, zero-shot planner for C4) so the slide stays honest.
+- This is the slide we present to organisers / press if we win. The visual hierarchy is deliberate: Tier 1 is large but muted ("everyone has this"); Tier 2 is mid-size and vibrant ("what makes us win"); Tier 3 is small but distinct ("process advantage compounding edge into score").
 
-Reference: `docs/strategy/00-master-strategy.md` SS 2.
+Reference: `docs/strategy/00-master-strategy.md` SS 2 and `docs/proposals/08-original-contributions.md`.
 
 ---
 

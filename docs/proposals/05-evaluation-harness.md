@@ -1,6 +1,8 @@
 # Proposal 05 - Evaluation Harness
 
 > Without a fast, reliable, repeatable internal evaluation we are guessing. This proposal describes our internal "mock-DRES" + regression test infra.
+>
+> **Why this is a load-bearing proposal for the original contributions:** the C1 (DiacriticBERT), C2 (learned fusion), and C4 (agent self-distillation) workstreams in [`08-original-contributions.md`](08-original-contributions.md) each ship behind an *ablation gate*. The harness is what runs those ablations. If the harness is weak, the ablations are uninterpretable and we end up shipping or killing contributions on vibes. SS 13-15 below describe the contribution-specific eval extensions.
 
 ## 1. Why a custom harness
 
@@ -156,3 +158,67 @@ Maximising this means we maximise correctness AND speed. KIS speed at finals is 
 - **Nightly full** (300 tasks): always.
 - **Weekly leaderboard** posted to team Slack.
 - **Pre-phase-gate** (Phases 1-4): full set + per-class report + operator drill report.
+- **C1/C2/C4 ablation reports** (SS 13-15): triggered before each ship/no-ship decision and re-run weekly while the contribution is active.
+
+## 13. C1 - Diacritic-noise robustness eval (`eval/diacritic_robustness.py`)
+
+For DiacriticBERT (proposal 08 SS 3). Two evals:
+
+### 13.1 Synthetic noise sweep
+- Take 500 clean Vietnamese queries from the dev set.
+- Apply each of the 4 noise modes (`drop_all`, `random_drop_p` with `p in {0.3, 0.5, 0.8}`, `tone_swap_p`, `mixed`) -> ~7000 (clean -> noisy) query instances.
+- For each instance: retrieve top-10 against the OCR/ASR/caption index; the gold is the frame retrieved for the *clean* query.
+- Metrics: **degradation@10** = `R@10(noisy) / R@10(clean)`. Target: with C1 on, `degradation@10 >= 0.85`; without C1 (BGE-M3 only baseline), expect `~0.65-0.75`.
+
+### 13.2 Real-task slice
+- On the 300-task dev set, tag the queries that involve Vietnamese proper nouns or scene-text references (~80-120 queries).
+- A/B: report R@1 / R@5 / NDCG@10 with `c1_on=true` vs `c1_on=false`.
+- Ship gate: >=1% R@1 lift on this slice AND no class regresses by >1.5%.
+
+### 13.3 Negative-result handling
+- If the synthetic sweep shows lift but the real-task slice does not, document the distribution gap in `experiments/c1/RESULT.md` and ship the SeaLLMs-v3 query-rewriting fallback.
+
+## 14. C2 - Learned-fusion vs RRF A/B (`eval/fusion_ablation.py`)
+
+For per-task-type learned fusion (proposal 08 SS 4).
+
+### 14.1 Per-task ablation
+- For each task type t in {KIS, QA, TRAKE, Ad-hoc}: on the 75-query slice for that type, report NDCG@10 for 3 fusion modes:
+  1. RRF k=60 (pre-C2 baseline and runtime auto-fallback)
+  2. Single global learned model (no per-task split)
+  3. Per-task-type learned model (C2 - the proposed new default)
+- Statistical significance: bootstrap 1000 resamples; report 95% CI. Ship gate: mode 3 beats mode 1 by >=1 point with non-overlapping CI on >=3 of 4 task types.
+
+### 14.2 Leakage check
+- Leave-one-task-out CV: train on 75% of tasks per type, test on held-out 25%. The gap between train and test NDCG@10 must be <3 points; otherwise we have overfit the dev set.
+
+### 14.3 Runtime guardrail validation
+- Inject 50 known-bad queries (gold not in top-200) and confirm the runtime auto-fallback to RRF triggers within the streaming 50-query window.
+
+## 15. C4 - Agent self-distillation ablation (`eval/agent_automatic_ablation.py`)
+
+For planner self-distillation (proposal 08 SS 6).
+
+### 15.1 Pre-distillation baseline
+- Before any DSPy round: run the zero-shot SeaLLMs-v3-7B planner on the automatic-track mock-finals (30 queries). Record per-task-type R@1 / R@5, time-to-submit, Brier-calibrated confidence.
+
+### 15.2 Post-distillation eval
+- After each DSPy MIPRO round: re-run on the same frozen 30-query set + a 70-query held-out set (never seen by DSPy).
+- Ship gate: held-out R@1 must beat the previous prompt by >=2% with paired bootstrap significance.
+
+### 15.3 Continual-refresh quality monitor
+- After each prelim and mock-finals batch, re-run 15.2. Plot R@1 over time. If R@1 plateaus or regresses, freeze the corpus and inspect for trace pollution (e.g., wrong-submission traces accidentally included).
+
+## 16. VLM rerank position-bias sweep (`eval/rerank_position_bias.py`)
+
+Applies to all VLM-as-judge configurations (proposal 01 SS 5.9 + C5 in proposal 08 SS 7).
+
+### 16.1 Position-bias quantification
+- Take 100 dev-set queries. For each, render the same 9 candidates in 6 different grid positions (rotate + transpose). Record the rank assigned to the gold candidate in each position.
+- Metric: **position-variance** = std-dev of gold-rank across the 6 positions. Lower is better.
+- Baseline (single-shot direct ranking): expect position-variance ~1.8-2.5 ranks.
+- With 3-vote input-shuffle mitigation: target <=1.0.
+- With C5 counterfactual pruning: target <=0.5.
+
+### 16.2 Cost-vs-quality curve
+- Plot rerank R@1 (y-axis) vs rerank latency (x-axis) for {1-vote direct, 3-vote shuffle, C5 counterfactual}. Use this curve in the finals slide deck to justify the chosen mode per task type.

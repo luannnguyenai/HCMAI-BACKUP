@@ -357,6 +357,8 @@ text query ? BGE-M3 dense ??
          ?? BM25 (Pyserini)?
 ```
 
+> **Note for our system:** this is the documented 2026 best-practice hybrid. Our chosen architecture (proposal 01 SS 5.11) extends it in two places: (a) DiacriticBERT MaxSim (C1) is added as a fourth ranker for Vietnamese OCR/ASR text; (b) RRF k=60 is replaced by a per-task-type LightGBM LambdaRank (C2) with RRF as the runtime auto-fallback. See [`../proposals/08-original-contributions.md`](../proposals/08-original-contributions.md) for the rationale and ablation plan.
+
 ---
 
 ## I. Fine-tuning for Retrieval

@@ -1,6 +1,8 @@
 # Proposal 02 - Automatic-Track Agent
 
 > The AIC2026 competition introduces a NEW automatic track where AI agents compete autonomously, without human-in-the-loop. This proposal describes how we build that agent on top of the substrate from proposal 01.
+>
+> **What is reused vs novel in this proposal:** the architecture (planner LLM + tool registry + critic loop + self-verification) reproduces the SnapMind (MMM 2026) blueprint. The novel additions are: (a) **agent self-distillation** from the interactive-track operator's traces via DSPy MIPRO (SS 14, contribution C4 - primary), (b) the **counterfactual VLM rerank** tool for OOK queries (SS 10.3, contribution C5 - backup), and (c) the **same C1/C2 retrieval substrate** as the interactive system. The full novelty proposal is [`08-original-contributions.md`](08-original-contributions.md).
 
 ## 1. Why this proposal exists
 
@@ -9,6 +11,10 @@ The competition rules state two evaluation modes:
 - **Automatic**: AI assistants compete autonomously.
 
 Most teams will treat the automatic track as an afterthought. We will treat it as **the same engine driven by a different controller**. If we win the automatic track, we capture an entire prize that few teams will seriously compete for.
+
+**What is reused from prior art and what we add on top:**
+- The **architecture pattern** (planner -> tool registry -> critic loop -> self-verification) reproduces SnapMind (MMM 2026, <https://doi.org/10.1007/978-981-95-6963-2_20>). We do not pretend the pattern is ours.
+- The **innovation** is what we *train the planner on*: the interactive-track operator's correct, fast submissions become a continually-refreshed distillation corpus via DSPy MIPRO. This pattern only exists because AIC2026 is the first year the interactive and automatic tracks coexist as serious sub-events. See SS 14 below and [`08-original-contributions.md`](08-original-contributions.md) SS 6.
 
 ## 2. Design principles
 
@@ -167,15 +173,22 @@ For ~50 queries in a finals round: <$1 in API costs. Trivially affordable.
 
 ## 10. The "secret weapon" tools
 
-Beyond the obvious retrieval tools, two unusual ones:
+Beyond the obvious retrieval tools, three unusual ones (10.1 and 10.2 are reused tricks; 10.3 is ours):
 
-### 10.1 `generative_visual_query`
+### 10.1 `generative_visual_query` (reused from NII-UIT VBS'25)
 - NII-UIT's VBS'25-winning trick: when the planner detects a hard descriptive query, generate a synthetic image with **Stable Diffusion XL** (Vietnamese -> English translation first), then run **image-to-image similarity** against our keyframe pool.
 - Especially powerful for OOK entities ("anh con cho` tha?ng be Nguye^~n Va(n A o+? cha? Be^?n Tha`nh" - "the picture of little Nguyen Van A's dog at Ben Thanh market") - SDXL can't draw Nguyen Van A's actual dog but can draw "a small dog with a child at a Vietnamese street market", which gets us in the right neighbourhood.
 
-### 10.2 `oot_external_search`
+### 10.2 `oot_external_search` (reused, standard LSC fallback)
 - For genuinely out-of-knowledge named entities, route to **Google Lens API** or **Bing Visual Search** with the query as a hint. Returns image URLs we can embed and match.
 - Limited use (low quality + cost) but a non-zero recall boost on the toughest queries.
+
+### 10.3 `counterfactual_vlm_rerank` (C5, ours - backup contribution)
+- Direct "rank these 9 from best to worst" prompts to VLM-as-judge are documented to be position-biased and brittle on long-tail entities. We replace direct ranking with **iterative counterfactual pruning**: ask the VLM which candidate is *least* consistent with the query, eliminate it, repeat on the remaining 8, etc., with input-order shuffle and 3-vote majority at each pruning step.
+- Cost: ~15 grid evals x 3 votes = ~45 VLM calls (~1.5s extra on local Vintern-3B-beta). Acceptable but not free.
+- Ships only if dev-set ablation shows >=5% R@1 lift on the OOK / long-tail-entity slice.
+- See [`08-original-contributions.md`](08-original-contributions.md) SS 7 for the full method.
+- Files: `src/rerank/counterfactual.py`, `prompts/counterfactual_rerank.txt`.
 
 ## 11. How the agent differs from the interactive system
 
@@ -197,4 +210,69 @@ Beyond the obvious retrieval tools, two unusual ones:
 
 ## 13. Acceptance test
 
-The automatic agent should achieve **at least 70% of the interactive system's score on the same 30-query mock-finals set**. If it falls below 50%, it indicates the planner LLM is undertuned and needs DSPy optimisation.
+The automatic agent should achieve **at least 70% of the interactive system's score on the same 30-query mock-finals set**. If it falls below 50%, it indicates the planner LLM is undertuned and needs DSPy optimisation (which is C4 below - so a failure here triggers C4 if it has not already shipped).
+
+## 14. Agent self-distillation (C4, ours - primary contribution)
+
+> Full method, eval, and risk discussion in [`08-original-contributions.md`](08-original-contributions.md) SS 6. This section explains how it wires into the automatic-track agent at runtime.
+
+### 14.1 Pattern in one sentence
+
+The interactive-track operator is the labelling oracle for the automatic-track planner.
+
+### 14.2 Wiring
+
+```
+[ Phase 1-3 interactive sessions ]
+         |
+         v
+[ Operator-trace logger (proposal 01 SS 5.12) ]
+         |
+         v
+   data/operator_traces.parquet
+         |
+         v
+[ Distillation corpus filter ]
+   - keep sessions where final_submission was correct
+   - keep sessions where time_to_submit < team-median
+         |
+         v
+[ DSPy MIPRO optimiser ]
+   - student: SeaLLMs-v3-7B planner prompt
+   - teacher: distilled (query, plan) demonstrations
+   - objective: tool-choice F1 + downstream R@1 (joint)
+         |
+         v
+[ Distilled planner prompt + kNN few-shot index ]
+         |
+         v
+   src/agent/planner_prompt.py  (loads both at startup)
+```
+
+### 14.3 Continual refresh schedule
+
+| When | Triggered by | Corpus size (estimate) |
+|---|---|---|
+| End of Phase 2 (mid-Aug) | Week 9-10 of plan | ~500-800 traces |
+| End of Phase 3 prelim (late Aug) | Prelim round logs | +200-400 traces |
+| Mid Phase 4 (Sept 6) | Mock-finals drills | +200-400 traces |
+| Eve of finals (Sept 11) | Final drill batch | +100-200 traces |
+
+The DSPy refresh runs in <1 hour on a single A6000 (the planner is 7B, MIPRO does ~50 forward passes per candidate prompt, ~10 candidate prompts).
+
+### 14.4 Safety guardrail
+
+Every distilled prompt is A/B'd on a frozen 100-query held-out set before replacing the production prompt. If the new prompt does not beat the previous by >=2% R@1, the previous prompt is kept and the new corpus is added to a quarantine queue for human review.
+
+### 14.5 Why this is novel and worth the slide
+
+- The automatic track is new in 2026. SnapMind (MMM 2026) gives the architecture but not the training signal.
+- The closest published patterns (Reflexion self-improvement, trajectory distillation for LLM agents) do not target multimodal retrieval planners trained on the same team's interactive operator.
+- The narrative for the finals press kit / post-competition writeup: *"The interactive operator and the automatic agent share an engine and, by week 12, share a planner trained on the operator's own decisions. The two tracks compound each other rather than competing for engineering attention."*
+
+### 14.6 Files
+
+- `train/planner_distill.py` (DSPy harness)
+- `data/operator_traces.parquet` (rolling log; schema in proposal 01 SS 5.12)
+- `src/agent/planner_prompt.py` (loads distilled prompt + few-shot kNN at startup)
+- `eval/agent_automatic_ablation.py` (per-task-type R@1, confidence calibration vs zero-shot baseline)

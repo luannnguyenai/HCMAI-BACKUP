@@ -81,7 +81,7 @@ Our choice is marked **CHOSEN**. Strong alternatives marked **BACKUP**.
 
 ### C3. **Milvus 2.5 with hybrid + structured fields**
 - Q: 5, E: 3, R: 2
-- Verdict: **CHOSEN** - MEMORIA's LSC'25 win came from this exact swap.
+- Verdict: **CHOSEN** - MEMORIA (LSC'25) reported their win-attribution as the FAISS->Milvus swap; we treat that as motivating evidence, not a controlled ablation. Hybrid dense+filter in one query is the engineering win.
 
 ### C4. Qdrant
 - Q: 5, E: 3, R: 2
@@ -381,6 +381,34 @@ Our choice is marked **CHOSEN**. Strong alternatives marked **BACKUP**.
 
 ---
 
+---
+
+## O. Original contributions on top of the SOTA stack
+
+Sections A-N describe the *reused* SOTA stack. Sections O1-O5 describe what we add on top: our original contributions. Full method, eval, and risk discussion in [`08-original-contributions.md`](08-original-contributions.md).
+
+### O1. **DiacriticBERT - Vietnamese diacritic-robust late-interaction head** (C1)
+- Q: 4, E: 2, R: 2
+- Verdict: **CHOSEN (primary)** - first retrieval head explicitly trained on a controlled Vietnamese diacritic-noise schedule. Targets a failure mode (item 3 in master strategy SS 7) that off-the-shelf BGE-M3 ignores. ~1 week, ~3 GPU-hours. Fallback if it fails ablation: SeaLLMs-v3 query-rewriting at index time.
+
+### O2. **Per-task-type learned fusion** (C2)
+- Q: 4, E: 1, R: 1
+- Verdict: **CHOSEN (primary)** - replaces uniform RRF k=60 (Cormack 2009) with a LightGBM LambdaRank model selected at query time by the planner's emitted `task_type`. ~3 days, ~30 minutes CPU. Runtime auto-fallback to RRF if the learned model regresses on a streaming 50-query window makes this risk-free in production.
+
+### O3. **PriorDP - story-graph generalisation of DANTE for TRAKE** (C3, backup)
+- Q: 4, E: 4, R: 3
+- Verdict: **BACKUP** - generalises DANTE's linear lambda penalty with a learned scene-transition prior matrix. Ships only if Phase 2 has slack AND TRAKE remains a task type in 2026 (not confirmed). ~2 weeks.
+
+### O4. **Agent self-distillation via DSPy on operator traces** (C4)
+- Q: 5, E: 2, R: 2
+- Verdict: **CHOSEN (primary)** - the interactive operator's correct, fast submissions are the training corpus for the automatic-track planner via DSPy MIPRO. Pattern only exists because 2026 is the first year the automatic track is a serious sub-event. ~1 week after Phase 1 instrumentation; refreshes continually through prelims and mock-finals.
+
+### O5. **Counterfactual VLM rerank for OOK named entities** (C5, backup)
+- Q: 4, E: 2, R: 2
+- Verdict: **BACKUP** - replaces direct "rank these 9" prompts with iterative counterfactual pruning + 3-vote shuffle, attacking the documented position-bias of VLM judges. ~1 week. Ships only if dev-set ablation shows >=5% R@1 on the long-tail-entity slice.
+
+---
+
 ## Summary
 
-Our chosen approach is **A3 + B3 + B5 + C3 + D4 + E2 + E3 + F2 + G1+G2 + H1+H2 + I2 + J3 + K1+K2 + L1+L2+L3 + M1+M2 + N3**. This is the highest-expected-value combination given a 17-week timeline and a 5-person team, and aligns with the empirical evidence from LSC'22-25, VBS'22-25, and AIC HCMC'23-25 winners.
+Our chosen approach is **A3 + B3 + B5 + C3 + D4 + E2 + E3 + F2 + G1+G2 + H1+H2 + I2 + J3 + K1+K2 + L1+L2+L3 + M1+M2 + N3 + O1+O2+O4**. The A-N items are the reused 2026 SOTA stack (aligns with empirical evidence from LSC'22-25, VBS'22-25, AIC HCMC'23-25 winners). The O1+O2+O4 items are our three primary original contributions. O3 and O5 are backups conditional on Phase 2 slack. This is the highest-expected-value combination of "reproduce the floor + add a defensible edge" given a 17-week timeline and a 5-person team.
