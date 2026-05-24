@@ -12,6 +12,10 @@
 
 [`docs/strategy/00-master-strategy.md`](docs/strategy/00-master-strategy.md) - one-page summary of our plan, timeline, team, and the eight things that will lose the competition if we skip them.
 
+Visual companions in [`docs/illustrations/`](docs/illustrations/README.md): system architecture, UI mockup, automatic-agent loop, and the winning-hypothesis stack - use these to anchor team discussions.
+
+![System Architecture](docs/illustrations/aic2026-system-architecture.png)
+
 ---
 
 ## What's in this repo (so far)
@@ -20,6 +24,12 @@
 docs/
   strategy/
     00-master-strategy.md            # the master plan
+  illustrations/                     # 4 visuals for team discussion
+    aic2026-system-architecture.png
+    aic2026-ui-mockup.png
+    aic2026-agent-loop.png
+    aic2026-winning-stack.png
+    README.md                        # discussion prompts per illustration
   research-notes/                    # external research, every claim cited
     01-aic-hcmc-prior-editions.md    # 2023/24/25 lessons
     02-lsc-vbs-systems-deep-dive.md  # world reference (LSC + VBS top systems)
