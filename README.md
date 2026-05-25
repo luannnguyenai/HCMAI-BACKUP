@@ -43,6 +43,8 @@ docs/
     05-evaluation-harness.md
     06-ui-ux-design.md
     07-approaches-catalog.md         # all considered approaches, chosen vs skipped
+    08-original-contributions.md     # C1-C5 novel work on top of the SOTA floor
+    09-llm-path-bakeoff.md           # RTX 5070 local vs Groq cloud: benchmark, criteria, deadline
     08-original-contributions.md     # what is actually novel in our system (vs reused SOTA)
   papers/                            # 37 downloaded reference papers
     foundation-vlm/                  # SigLIP-2, Meta CLIP 2, EVA-CLIP, CLIP, ...

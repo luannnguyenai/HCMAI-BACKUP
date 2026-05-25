@@ -262,8 +262,9 @@ The two operators must be cross-trained and able to swap mid-round.
 
 1. **Team registration**: register through <https://263.org.vn/AIC2026-Registration> before June 15.
 2. **License confirmation**: email/Slack the organising committee to confirm whether CC-BY-NC weights (PhoWhisper, jina-v3) are allowed.
-3. **Hardware**: decide laptop vs desktop for finals; nail down GPU spec.
-4. **Cloud budget**: how much will we spend on Gemini 2.5 Flash + GPT-4o during practice and finals?
-5. **Dataset preview**: any way to access a sample of the AIC2026 data ahead of June 25? Ask HCMUS contacts.
-6. **TRAKE in 2026?**: not confirmed yet that TRAKE remains a task in 2026; design for it but keep the rest task-agnostic.
-7. **Operator candidates**: identify the 2 operators by June 1 and start their practice schedule.
+3. **Hardware** (resolved May 25): finals box = **RTX 5070 (12 GB)**; offline training/indexing on **GH200** cloud burst. Implication: all hot-path LLM/VLM weights must be quantized to INT4 or FP4; only text-tower encoders kept online; image embeddings pre-computed on GH200. See `docs/proposals/01-interactive-system-architecture.md` §6 (to be updated post-bakeoff).
+4. **LLM path** (in flight): local-5070 vs Groq-cloud bakeoff. Owner = team lead. Deadline = end of June. Pre-registered success criterion and methodology in [`docs/proposals/09-llm-path-bakeoff.md`](../proposals/09-llm-path-bakeoff.md). Closes the original "cloud budget" question with a measurement, not a guess.
+5. **UI stack** (resolved May 25): no Streamlit / Gradio. React 18 + Vite + Zustand + WebSocket + virtualised grid + nginx-served thumbnails. Latency SLO: p95 end-to-end < 2 s, p50 < 900 ms. See proposal 06.
+6. **Dataset preview**: any way to access a sample of the AIC2026 data ahead of June 25? Ask HCMUS contacts.
+7. **TRAKE in 2026?**: not confirmed yet that TRAKE remains a task in 2026; design for it but keep the rest task-agnostic.
+8. **Operator candidates**: identify the 2 operators by June 1 and start their practice schedule.
