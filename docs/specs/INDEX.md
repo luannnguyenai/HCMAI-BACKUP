@@ -1,6 +1,6 @@
 # Spec Registry
 
-> Append a row when you reserve a spec ID, even before the spec body is written. Keep the table sorted by ID. Status is the single source of truth ó update it as the spec moves through the lifecycle in [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+> Append a row when you reserve a spec ID, even before the spec body is written. Keep the table sorted by ID. Status is the single source of truth ù update it as the spec moves through the lifecycle in [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
 ## Conventions
 
@@ -16,20 +16,35 @@
 | [SPEC-0002](SPEC-0002-llm-path-bakeoff-runner.md) | LLM path bakeoff runner | Draft | team lead | 09 | Owns the June 25 decision |
 | _SPEC-0003_ | Data ingestion pipeline | _reserved_ | _unassigned_ | 03 | TransNetV2 + keyframe + audio extraction |
 | _SPEC-0004_ | Image-embedding service | _reserved_ | _unassigned_ | 01 SS 5.3 | SigLIP-2 + Meta CLIP 2 + InternVideo2 |
-| _SPEC-0005_ | OCR + ASR ingestion | _reserved_ | _unassigned_ | 01 SS 5.5ñ5.6 | PaddleOCR + PhoWhisper |
+| _SPEC-0005_ | OCR + ASR ingestion | _reserved_ | _unassigned_ | 01 SS 5.5ù5.6 | PaddleOCR + PhoWhisper |
 | _SPEC-0006_ | Milvus schema and queries | _reserved_ | _unassigned_ | 01 SS 5.4 | Hybrid vector + structured filter |
-| _SPEC-0007_ | Elasticsearch schema and queries | _reserved_ | _unassigned_ | 01 SS 5.4 | OCR / ASR / caption indexes |
+| _SPEC-0007_ | Elasticsearch schema and queries | _reserved_ | _unassigned_ | 01 SS 5.4 | OCR / ASR / caption indexes. **Must NOT use `asciifolding` filter on Vietnamese text ù strips diacritics** (see research-note 05 SS 4.1) |
 | _SPEC-0008_ | Planner LLM service | _reserved_ | _unassigned_ | 01 SS 5.8 | SGLang + SeaLLMs-v3 or Groq; bakeoff-gated |
 | _SPEC-0009_ | Tool registry contract | _reserved_ | _unassigned_ | 02 SS 4 | Pydantic schema for tools |
 | _SPEC-0010_ | VLM-as-judge reranker | _reserved_ | _unassigned_ | 01 SS 5.9 | Vintern-3B-beta + position-bias mitigation |
 | _SPEC-0011_ | DANTE DP for TRAKE | _reserved_ | _unassigned_ | 01 SS 5.10 | 4-scene temporal alignment |
 | _SPEC-0012_ | React operator console | _reserved_ | _unassigned_ | 06 | UI shell + grid + scrubber |
 | _SPEC-0013_ | Submission verification panel | _reserved_ | _unassigned_ | 06 SS 3.7 | Anti-foot-gun UI component |
-| _SPEC-0014_ | C1 ó DiacriticBERT training | _reserved_ | _unassigned_ | 08 SS 3 | Diacritic-noise schedule + InfoNCE |
-| _SPEC-0015_ | C2 ó Per-task-type learned fusion | _reserved_ | _unassigned_ | 08 SS 4 | LightGBM LambdaRank + RRF fallback |
-| _SPEC-0016_ | C4 ó Agent self-distillation | _reserved_ | _unassigned_ | 08 SS 6 | DSPy MIPRO over operator traces |
+| _SPEC-0014_ | C1 ù DiacriticBERT training | _reserved_ | _unassigned_ | 08 SS 3 | Diacritic-noise schedule + InfoNCE. Failure mode it attacks is documented in baseline (research-note 05 SS 4.1) |
+| _SPEC-0015_ | C2 ù Per-task-type learned fusion | _reserved_ | _unassigned_ | 08 SS 4 | LightGBM LambdaRank + RRF fallback |
+| _SPEC-0016_ | C4 ù Agent self-distillation | _reserved_ | _unassigned_ | 08 SS 6 | DSPy MIPRO over operator traces |
 | _SPEC-0017_ | LangGraph automatic-track agent | _reserved_ | _unassigned_ | 02 | State machine + retry loop |
-| _SPEC-0018_ | DRES integration | _reserved_ | _unassigned_ | 05 | Submission client + score polling |
+| [SPEC-0018](SPEC-0018-dres-integration.md) | DRES integration client | Draft | _unassigned_ | 05 | Login + submit; borrows from 2025 baseline under [ADR-0010](../adr/ADR-0010-borrow-from-2025-baseline.md). Prod URL: `https://eventretrieval.oj.io.vn` |
 | _SPEC-0019_ | Operator trace logger | _reserved_ | _unassigned_ | 02 SS 8 | Feeds C4; Parquet append-only |
 
-Rows in italics are reserved IDs ó the spec body has not yet been authored. When you start authoring a reserved spec, drop the italics, fill in the file, set status to `Draft`.
+## Cross-cutting prior art
+
+[`docs/research-notes/05-baseline-2025-analysis.md`](../research-notes/05-baseline-2025-analysis.md) catalogues reusable patterns from the 2025 baseline. When you author any of the reserved specs above, check that note for prior art and borrow under [ADR-0010](../adr/ADR-0010-borrow-from-2025-baseline.md). Specifically:
+
+- **SPEC-0003** (data ingestion): borrow `transnetv2_pytorch.py` + the 29 MB weight directly.
+- **SPEC-0007** (Elasticsearch): do **not** reuse their `asciifolding` analyser; use ICU + pyvi instead.
+- **SPEC-0008** (planner): reuse `auto_expand` / `num_expansions` paraphrase pattern; replace Phi-3 with SeaLLMs-v3.
+- **SPEC-0009** (tool registry): reuse the request-schema knob set (`rrf_k`, `decay_rate`, `per_event_k`, etc.).
+- **SPEC-0010** (VLM reranker): reuse the BLIP-2 ITC/ITM toggle as a fallback path.
+- **SPEC-0011** (DANTE DP): reuse `decay_rate`, `max_gap_seconds`, `same_video_only` as parameter names.
+- **SPEC-0012** (React console): port the bookmarks concept for TRAKE staging.
+- **SPEC-0018** (DRES integration): already authored; borrows from the 2025 baseline directly.
+
+## Notes
+
+Rows in italics are reserved IDs ù the spec body has not yet been authored. When you start authoring a reserved spec, drop the italics, fill in the file, set status to `Draft`.

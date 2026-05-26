@@ -20,4 +20,5 @@
 | [ADR-0006](ADR-0006-int4-quantization-hot-path.md) | INT4 / FP4 quantization for hot-path models | Accepted | 2026-05-25 | Required by ADR-0003 |
 | [ADR-0007](ADR-0007-original-contributions-c1-c2-c4.md) | Three primary original contributions: C1, C2, C4 | Accepted | 2026-05-24 | The "Edge" tier of ADR-0001 |
 | [ADR-0008](ADR-0008-rrf-as-runtime-fallback.md) | RRF is the fallback; C2 is the default fusion | Accepted | 2026-05-24 | Inverts the original proposal stance |
-| [ADR-0009](ADR-0009-sdd-workflow.md) | Spec-Driven Development is the workflow | Accepted | 2026-05-26 | This commit |
+| [ADR-0009](ADR-0009-sdd-workflow.md) | Spec-Driven Development is the workflow | Accepted | 2026-05-26 | The workflow itself |
+| [ADR-0010](ADR-0010-borrow-from-2025-baseline.md) | Borrow from the 2025 baseline repo under attribution | Accepted | 2026-05-26 | Policy + per-file header + `THIRD_PARTY.md` |
