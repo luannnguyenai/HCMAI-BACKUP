@@ -262,9 +262,10 @@ The two operators must be cross-trained and able to swap mid-round.
 
 1. **Team registration**: register through <https://263.org.vn/AIC2026-Registration> before June 15.
 2. **License confirmation**: email/Slack the organising committee to confirm whether CC-BY-NC weights (PhoWhisper, jina-v3) are allowed.
-3. **Hardware** (resolved May 25): finals box = **RTX 5070 (12 GB)**; offline training/indexing on **GH200** cloud burst. Implication: all hot-path LLM/VLM weights must be quantized to INT4 or FP4; only text-tower encoders kept online; image embeddings pre-computed on GH200. See `docs/proposals/01-interactive-system-architecture.md` §6 (to be updated post-bakeoff).
-4. **LLM path** (in flight): local-5070 vs Groq-cloud bakeoff. Owner = team lead. Deadline = end of June. Pre-registered success criterion and methodology in [`docs/proposals/09-llm-path-bakeoff.md`](../proposals/09-llm-path-bakeoff.md). Closes the original "cloud budget" question with a measurement, not a guess.
-5. **UI stack** (resolved May 25): no Streamlit / Gradio. React 18 + Vite + Zustand + WebSocket + virtualised grid + nginx-served thumbnails. Latency SLO: p95 end-to-end < 2 s, p50 < 900 ms. See proposal 06.
-6. **Dataset preview**: any way to access a sample of the AIC2026 data ahead of June 25? Ask HCMUS contacts.
-7. **TRAKE in 2026?**: not confirmed yet that TRAKE remains a task in 2026; design for it but keep the rest task-agnostic.
-8. **Operator candidates**: identify the 2 operators by June 1 and start their practice schedule.
+3. **Hardware** (resolved May 25, see [ADR-0003](../adr/ADR-0003-rtx5070-finals-gh200-offline.md) and [ADR-0006](../adr/ADR-0006-int4-quantization-hot-path.md)): finals box = **RTX 5070 (12 GB)**; offline training/indexing on **GH200** cloud burst. Implication: all hot-path LLM/VLM weights must be quantized to INT4 or FP4; only text-tower encoders kept online; image embeddings pre-computed on GH200.
+4. **LLM path** (in flight, see [ADR-0005](../adr/ADR-0005-llm-path-bakeoff-gates-planner.md) + [proposal 09](../proposals/09-llm-path-bakeoff.md) + [SPEC-0002](../specs/SPEC-0002-llm-path-bakeoff-runner.md)): local-5070 vs Groq-cloud bakeoff. Owner = team lead. Deadline = end of June. Closes the original "cloud budget" question with a measurement, not a guess.
+5. **UI stack** (resolved May 25, see [ADR-0004](../adr/ADR-0004-no-streamlit-react-websocket-ui.md)): no Streamlit / Gradio. React 18 + Vite + Zustand + WebSocket + virtualised grid + nginx-served thumbnails. Latency SLO: p95 end-to-end < 2 s, p50 < 900 ms.
+6. **Workflow** (resolved May 26, see [ADR-0009](../adr/ADR-0009-sdd-workflow.md) + [`CONTRIBUTING.md`](../../CONTRIBUTING.md)): **Spec-Driven Development**. Every code change traces to a SPEC; every irreversible decision is recorded as an ADR.
+7. **Dataset preview**: any way to access a sample of the AIC2026 data ahead of June 25? Ask HCMUS contacts.
+8. **TRAKE in 2026?**: not confirmed yet that TRAKE remains a task in 2026; design for it but keep the rest task-agnostic.
+9. **Operator candidates**: identify the 2 operators by June 1 and start their practice schedule.

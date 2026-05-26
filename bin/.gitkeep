@@ -1,0 +1,2 @@
+# Reserved for executable entrypoints (bin/eval, bin/benchmark_llm_paths, etc.)
+# See docs/specs/ for the contracts these scripts implement.

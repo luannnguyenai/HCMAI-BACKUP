@@ -12,6 +12,10 @@
 
 [`docs/strategy/00-master-strategy.md`](docs/strategy/00-master-strategy.md) - one-page summary of our plan, timeline, team, and the eight things that will lose the competition if we skip them.
 
+[`CONTRIBUTING.md`](CONTRIBUTING.md) - the **Spec-Driven Development (SDD)** workflow every contribution follows. Read once before your first PR.
+
+[`AGENTS.md`](AGENTS.md) - agent supplement to `CONTRIBUTING.md` for AI assistants (Cursor, Claude Code, Codex). Read once at the start of any task.
+
 Visual companions in [`docs/illustrations/`](docs/illustrations/README.md): system architecture, UI mockup, automatic-agent loop, and the winning-hypothesis stack - use these to anchor team discussions.
 
 ![System Architecture](docs/illustrations/aic2026-system-architecture.png)
@@ -43,9 +47,8 @@ docs/
     05-evaluation-harness.md
     06-ui-ux-design.md
     07-approaches-catalog.md         # all considered approaches, chosen vs skipped
-    08-original-contributions.md     # C1-C5 novel work on top of the SOTA floor
-    09-llm-path-bakeoff.md           # RTX 5070 local vs Groq cloud: benchmark, criteria, deadline
     08-original-contributions.md     # what is actually novel in our system (vs reused SOTA)
+    09-llm-path-bakeoff.md           # RTX 5070 local vs Groq cloud: benchmark, criteria, deadline
   papers/                            # 37 downloaded reference papers
     foundation-vlm/                  # SigLIP-2, Meta CLIP 2, EVA-CLIP, CLIP, ...
     lsc-systems/                     # LSC review, MERVIN, QUEST-DANTE, EEIoT...
@@ -113,11 +116,15 @@ Offline: TransNetV2 shot detection -> keyframes -> three image encoders (SigLIP-
 
 ## How to contribute
 
-This repo currently holds strategy and research. Code lives in (forthcoming) `src/`, `infra/`, `train/`. When implementation starts in Phase 1 (after June 25):
-- Each proposal becomes a tracking issue.
-- Each module has an owner (see team table in proposal 01).
-- Every PR runs the smoke eval set (20 mock tasks).
-- Nightly runs the full eval set (300 mock tasks); regressions >2% block merge.
+This repo follows **Spec-Driven Development**. The full workflow is in [`CONTRIBUTING.md`](CONTRIBUTING.md); AI assistants additionally read [`AGENTS.md`](AGENTS.md). The one-line rule: **no code without a spec, no decision without an ADR**.
+
+Quick path for a new feature:
+1. Find or write the spec in [`docs/specs/`](docs/specs/) using [`docs/specs/template.md`](docs/specs/template.md). Reserve an ID in [`docs/specs/INDEX.md`](docs/specs/INDEX.md).
+2. If the spec depends on a non-obvious irreversible decision, write the ADR first using [`docs/adr/template.md`](docs/adr/template.md).
+3. Branch as `spec/NNNN-short-name`. Code references the spec ID. Tests are named for the acceptance criteria they prove.
+4. Open a PR using [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md). Attach `bin/eval` evidence if score-relevant.
+
+Code lives in (forthcoming) `src/`, `infra/`, `train/`. Every PR runs the smoke eval set (20 mock tasks); nightly runs the full eval set (300 mock tasks); regressions >2% block merge.
 
 ## License
 
