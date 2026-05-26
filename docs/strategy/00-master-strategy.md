@@ -268,4 +268,5 @@ The two operators must be cross-trained and able to swap mid-round.
 6. **Workflow** (resolved May 26, see [ADR-0009](../adr/ADR-0009-sdd-workflow.md) + [`CONTRIBUTING.md`](../../CONTRIBUTING.md)): **Spec-Driven Development**. Every code change traces to a SPEC; every irreversible decision is recorded as an ADR.
 7. **Dataset preview**: any way to access a sample of the AIC2026 data ahead of June 25? Ask HCMUS contacts.
 8. **TRAKE in 2026?**: not confirmed yet that TRAKE remains a task in 2026; design for it but keep the rest task-agnostic.
-9. **Operator candidates**: identify the 2 operators by June 1 and start their practice schedule.
+9. **Operator candidates**: identify the 2 operators by June 1 and start their practice schedule. Natural candidate: [`ThanhToan2111`](https://github.com/ThanhToan2111) (current team member, author of the 2025 baseline) — has the most operator-side experience with DRES and the AIC HCMC venue.
+10. **Interview with the 2025 baseline author** (now confirmed team member): 30-minute agenda bundled in [`docs/permissions/2025-baseline-reuse.md`](../permissions/2025-baseline-reuse.md) §4. Resolves 10 currently-open questions across research-note 05 and SPEC-0018 in a single call. Schedule this week.

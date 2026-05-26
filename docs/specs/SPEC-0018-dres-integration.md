@@ -2,7 +2,7 @@
 id: SPEC-0018
 title: DRES integration client (login, evaluation list, submit)
 status: Draft
-owner: unassigned
+owner: unassigned (natural candidate ó `ThanhToan2111`, author of the 2025 prior art)
 created: 2026-05-26
 updated: 2026-05-26
 implements_proposal: docs/proposals/05-evaluation-harness.md
@@ -13,13 +13,13 @@ depends_on:
   - SPEC-0001
 ---
 
-# SPEC-0018 ó DRES integration client
+# SPEC-0018 ù DRES integration client
 
 > A minimal Python client for the DRES (Distributed Retrieval Evaluation Server) used by AIC HCMC. Provides login, evaluation listing, session management, and submit. Used by SPEC-0001 (eval harness) for local mock-DRES runs and by the live finals interactive backend for real submissions. The login + submit flow is borrowed from the 2025 baseline under [ADR-0010](../adr/ADR-0010-borrow-from-2025-baseline.md).
 
 ## 1. Context
 
-The interactive track's submissions go to the **DRES** server (open source, <https://github.com/dres-dev/DRES>). The production HCMC AIC instance is at **<https://eventretrieval.oj.io.vn>** (URL discovered in the 2025 baseline; see [`docs/research-notes/05-baseline-2025-analysis.md`](../research-notes/05-baseline-2025-analysis.md) ß3.1).
+The interactive track's submissions go to the **DRES** server (open source, <https://github.com/dres-dev/DRES>). The production HCMC AIC instance is at **<https://eventretrieval.oj.io.vn>** (URL discovered in the 2025 baseline; see [`docs/research-notes/05-baseline-2025-analysis.md`](../research-notes/05-baseline-2025-analysis.md) ù3.1).
 
 The 2025 baseline (`ThanhToan2111/AIC_2026` at commit `c3c3545`, `streamlit_api.py:122-200`) contains a working login + submit flow, but coupled to Streamlit's `session_state`. We extract it into a clean Python module so the same client can be driven by:
 - The eval harness ([SPEC-0001](SPEC-0001-evaluation-harness.md)) against a *local* DRES Docker instance.
@@ -184,7 +184,7 @@ DRES_TIMEOUT=10
 ## 7. Dependencies
 
 - **Internal**:
-  - [SPEC-0001](SPEC-0001-evaluation-harness.md) ó the eval harness imports `DresClient` to drive `bin/eval` submissions.
+  - [SPEC-0001](SPEC-0001-evaluation-harness.md) ù the eval harness imports `DresClient` to drive `bin/eval` submissions.
 - **External**:
   - `httpx >= 0.27` (sync + async HTTP client)
   - `pydantic >= 2`
@@ -217,10 +217,12 @@ DRES_TIMEOUT=10
 
 ## 9. Open questions
 
-- **Q1**: Does the production DRES at `eventretrieval.oj.io.vn` use the DRES v2 endpoints exactly as the open-source project documents, or does AIC HCMC run a fork? Need to confirm ó possibly by asking the original baseline author (`ThanhToan2111`).
-- **Q2**: TRAKE submission body ó is the ordered list a JSON array of `{mediaItemName, start, end}` objects, or a flat list of media-item IDs? The 2025 baseline did not implement TRAKE submission cleanly (`streamlit_api.py` showed only KIS/QA). Need to verify against the DRES v2 spec.
-- **Q3**: Session-id transport ó header (`X-Session`), cookie (`SESSIONID=`), or query param (`?session=`)? The 2025 baseline used the query param (`?session={id}`); we should confirm this is preferred and not just one of several supported forms.
-- **Q4**: Rate limiting ó does DRES rate-limit submissions per session, and if so, at what rate? Affects our automatic-track agent's retry policy.
+All four questions below are **in flight** ù answers expected from the 30-minute team interview with the 2025 baseline author bundled in [`docs/permissions/2025-baseline-reuse.md`](../permissions/2025-baseline-reuse.md) ù4 (items 3-6). Update this section after that conversation.
+
+- **Q1**: Does the production DRES at `eventretrieval.oj.io.vn` use the DRES v2 endpoints exactly as the open-source project documents, or does AIC HCMC run a fork?
+- **Q2**: TRAKE submission body ù is the ordered list a JSON array of `{mediaItemName, start, end}` objects, or a flat list of media-item IDs? The 2025 baseline only implemented KIS/QA submissions cleanly.
+- **Q3**: Session-id transport ù header, cookie, or query param? The 2025 baseline used the query param (`?session={id}`); we should confirm this is preferred and not just one of several supported forms.
+- **Q4**: Rate limiting ù does DRES rate-limit submissions per session, and at what rate? Affects automatic-track agent retry policy.
 
 ## 10. Changelog
 
