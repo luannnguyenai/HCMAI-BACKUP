@@ -6,15 +6,22 @@
 
 ![System Architecture](aic2026-system-architecture.png)
 
-What this shows: the full **offline indexing pipeline** (top) and **online query pipeline** (bottom) in one view.
+What this shows: the full **offline indexing pipeline** (top) and **online query pipeline** (bottom), reflecting the architecture as it stood after the dataset-shape intel ([research-note 06](../research-notes/06-aic2026-dataset-shape.md)) and the original-contributions decisions ([ADR-0007](../adr/ADR-0007-original-contributions-c1-c2-c4.md), [ADR-0008](../adr/ADR-0008-rrf-as-runtime-fallback.md)).
+
+Visual conventions:
+- **Mint-green outlines** mark our three Edge contributions: C1 (DiacriticBERT late-interaction head, offline), C2 (per-task-type LambdaRank fusion, online), C4 (planner self-distillation from operator traces).
+- **Dimmed gold** marks the organiser-provided lane (keyframes, OD, baseline CLIP, YouTube URLs in metadata). The baseline CLIP is kept only as an ablation lane; we don't expect it to beat our 3-encoder ensemble.
+- **Brightness** in the ASR row reflects priority: yt-dlp YouTube captions are bright (primary), PhoWhisper-large is dimmed with a dashed border (fallback for videos lacking captions).
 
 Discussion prompts for the team:
 - Do we agree on the three image encoders (SigLIP-2, Meta CLIP 2, InternVideo2-1B)? Should we replace InternVideo2 with V-JEPA-2 or LanguageBind?
-- One Milvus, two Elasticsearch indexes - or fold everything into Milvus hybrid?
-- Should the planner LLM also be in the offline pipeline (for caption generation)?
-- Where does the audio-events (CLAP) lane fit? Add a fourth pipeline?
+- One Milvus collection per encoder, or one Milvus collection with multiple vector fields? Either way, do we keep the organisers' baseline CLIP indexed (gold lane) for ablation? See research-note 06 SS 2.3 for the rationale.
+- yt-dlp primary, PhoWhisper fallback - what is our empirical caption-coverage threshold for dropping PhoWhisper entirely? (PhoWhisper is CC-BY-NC-SA; coverage-driven removal would close strategy SS 10 item 2.)
+- DiacriticBERT is shown applied to both OCR and ASR text. Is there a case for applying it only to ASR (which is noisier) and not OCR? Defer to SPEC-0014.
+- Where does the audio-events (CLAP) lane fit? Add a fifth pipeline if we end up using it; not currently in scope.
+- The "auto-track variant: distilled from operator traces (C4)" annotation under the planner - is that the right hierarchy, or should the auto-track be drawn as a separate side-loop?
 
-Reference: `docs/proposals/01-interactive-system-architecture.md`.
+Reference: `docs/proposals/01-interactive-system-architecture.md`, `docs/proposals/08-original-contributions.md`, [`docs/research-notes/06-aic2026-dataset-shape.md`](../research-notes/06-aic2026-dataset-shape.md).
 
 ## 2. UI Mockup - `aic2026-ui-mockup.png`
 
