@@ -1,0 +1,27 @@
+target-version = "py311"
+line-length = 100
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",  # line-too-long; ruff format handles this
+]
+
+[lint.per-file-ignores]
+"tests/**/*.py" = [
+    "B011",  # assert False patterns are fine in tests
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

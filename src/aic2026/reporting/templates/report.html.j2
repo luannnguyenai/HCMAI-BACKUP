@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ metrics.system }} - {{ metrics.run_id }}</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+           max-width: 1000px; margin: 2rem auto; padding: 0 1rem;
+           background: canvas; color: canvastext; }
+    h1, h2 { margin-block-end: 0.5rem; }
+    .subtle { color: GrayText; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border-bottom: 1px solid #4443; padding: 0.4rem 0.6rem; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    th { background: #80808022; font-weight: 600; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 99px;
+            background: #80808022; font-size: 0.85rem; margin-right: 0.25rem; }
+    .footer { color: GrayText; font-size: 0.85rem; margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>{{ metrics.system }}</h1>
+  <p class="subtle">
+    <span class="pill">run {{ metrics.run_id }}</span>
+    <span class="pill">git {{ metrics.git_sha or 'n/a' }}</span>
+    <span class="pill">n = {{ metrics.n_tasks }}</span>
+    <span class="pill">schema v{{ metrics.schema_version }}</span>
+  </p>
+
+  <h2>Overall</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>tasks</td><td>{{ metrics.overall.n }}</td></tr>
+      <tr><td>correct</td><td>{{ metrics.overall.n_correct }}</td></tr>
+      <tr><td>mean R@1</td><td>{{ "%.3f"|format(metrics.overall.mean_r_at_1) }}</td></tr>
+      <tr><td>mean R@5</td><td>{{ "%.3f"|format(metrics.overall.mean_r_at_5) }}</td></tr>
+      <tr><td>mean R@10</td><td>{{ "%.3f"|format(metrics.overall.mean_r_at_10) }}</td></tr>
+      <tr><td>mean MRR</td><td>{{ "%.3f"|format(metrics.overall.mean_mrr) }}</td></tr>
+      <tr><td>wrong submissions / task</td><td>{{ "%.2f"|format(metrics.overall.wrong_submissions_per_task) }}</td></tr>
+      <tr><td>latency p50 (ms)</td><td>{{ "%.1f"|format(metrics.latency.p50_ms) }}</td></tr>
+      <tr><td>latency p95 (ms)</td><td>{{ "%.1f"|format(metrics.latency.p95_ms) }}</td></tr>
+      <tr><td>latency p99 (ms)</td><td>{{ "%.1f"|format(metrics.latency.p99_ms) }}</td></tr>
+    </tbody>
+  </table>
+
+  <h2>By task type</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>task type</th>
+        <th>n</th>
+        <th>correct</th>
+        <th>R@1</th>
+        <th>R@5</th>
+        <th>R@10</th>
+        <th>MRR</th>
+        <th>KIS score</th>
+        <th>Ad-hoc score</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for task_type, agg in metrics.by_task_type.items() %}
+      <tr>
+        <td><code>{{ task_type.value }}</code></td>
+        <td>{{ agg.n }}</td>
+        <td>{{ agg.n_correct }}</td>
+        <td>{{ "%.3f"|format(agg.mean_r_at_1) }}</td>
+        <td>{{ "%.3f"|format(agg.mean_r_at_5) }}</td>
+        <td>{{ "%.3f"|format(agg.mean_r_at_10) }}</td>
+        <td>{{ "%.3f"|format(agg.mean_mrr) }}</td>
+        <td>{% if agg.mean_kis_score is not none %}{{ "%.1f"|format(agg.mean_kis_score) }}{% else %}-{% endif %}</td>
+        <td>{% if agg.mean_adhoc_score is not none %}{{ "%.1f"|format(agg.mean_adhoc_score) }}{% else %}-{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="footer">
+    Per-class slicing (place / ADL / time-of-day) and <code>--baseline</code> diff arrive in Tier 3
+    (SPEC-0001 AC5 + AC6). For now, see <code>metrics.json</code> for the full per-task detail.
+  </p>
+</body>
+</html>

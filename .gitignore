@@ -33,7 +33,8 @@ data/indexes/
 *.duckdb
 *.sqlite
 *.db
-eval-results/
+eval-results/*/
+!eval-results/.gitkeep
 experiments/*/checkpoints/
 
 # Model weights (track via download scripts, not commit)
