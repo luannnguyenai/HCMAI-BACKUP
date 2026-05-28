@@ -1,10 +1,10 @@
 ---
 id: SPEC-0001
 title: Evaluation harness (mock-DRES + 300-task set + bin/eval CLI)
-status: Draft
+status: Approved
 owner: unassigned
 created: 2026-05-26
-updated: 2026-05-26
+updated: 2026-05-28
 implements_proposal: docs/proposals/05-evaluation-harness.md
 related_adrs:
   - ADR-0008
@@ -12,9 +12,9 @@ related_adrs:
 depends_on: []
 ---
 
-# SPEC-0001 ó Evaluation harness (mock-DRES + 300-task set + bin/eval CLI)
+# SPEC-0001 ù Evaluation harness (mock-DRES + 300-task set + bin/eval CLI)
 
-> The internal evaluation harness ó a locally-hosted DRES instance, a 300-task mock set, and the `bin/eval` CLI that runs them. This is the gate every other spec runs against. Without it, we are guessing.
+> The internal evaluation harness ù a locally-hosted DRES instance, a 300-task mock set, and the `bin/eval` CLI that runs them. This is the gate every other spec runs against. Without it, we are guessing.
 
 ## 1. Context
 
@@ -107,7 +107,7 @@ eval-results/<system>/<timestamp>/
 
 ### 4.2 Failure modes
 - **Task schema invalid**: refuse to start; print the offending line.
-- **DRES unreachable**: retry 3◊ with backoff; then fail loudly. Do not silently skip tasks.
+- **DRES unreachable**: retry 3ù with backoff; then fail loudly. Do not silently skip tasks.
 - **System backend down**: fail the task with `failure_kind: backend_down`; continue to next task.
 - **Wall-clock timeout**: submit the best candidate available; flag `partial_completion: true`.
 
@@ -120,11 +120,11 @@ eval-results/<system>/<timestamp>/
 - **AC1**: `bin/eval --tasks tests/mock_tasks/smoke_20.jsonl --system v0.0.1-baseline` runs to completion against a stub backend and emits `report.html` + `metrics.json`.
 - **AC2**: The schema validator rejects a mock-task JSONL with a missing `task_type` field and prints a useful error.
 - **AC3**: When DRES is unreachable for >30 seconds, the run fails with exit code 2 and a diagnostic message; no metrics are written.
-- **AC4**: `metrics.json` includes all metrics from ß6 of the parent proposal and is loadable by `json.load`.
+- **AC4**: `metrics.json` includes all metrics from ù6 of the parent proposal and is loadable by `json.load`.
 - **AC5**: `report.html` includes a per-task-type slicing table (KIS / QA / AD_HOC / TRAKE) and a per-class slicing table by `metadata.difficulty`.
 - **AC6**: Running with `--baseline <previous-system>` adds a diff column to `report.html` and writes per-metric deltas to `metrics.json` under key `delta_vs_baseline`.
 - **AC7**: `bin/eval` exit code is non-zero if any of the *pre-registered CI thresholds* (defined in `eval/ci_thresholds.json`) is violated; zero otherwise. The thresholds initially include: KIS R@1 ? 0.50, QA correctness ? 0.40, p95 end-to-end < 2.0 s.
-- **AC8**: Determinism ó running the same task set twice with the same seed on the same system produces metrics agreeing to ±0.1 % across all numeric fields.
+- **AC8**: Determinism ù running the same task set twice with the same seed on the same system produces metrics agreeing to ù0.1 % across all numeric fields.
 
 ## 6. Non-functional requirements
 
@@ -137,7 +137,7 @@ eval-results/<system>/<timestamp>/
 
 - **Internal**: none yet (this is the foundation).
 - **External**:
-  - DRES (Distributed Retrieval Evaluation Server) ó <https://github.com/dres-dev/DRES>, used at LSC/VBS.
+  - DRES (Distributed Retrieval Evaluation Server) ù <https://github.com/dres-dev/DRES>, used at LSC/VBS.
   - `pydantic >= 2`, `httpx`, `duckdb`, `pyarrow`, `jinja2` (for report rendering), `pytest` (developer tests).
 - **Data**:
   - `tests/mock_tasks/smoke_20.jsonl` (20 hand-curated tasks for per-PR CI; included with this spec's first PR)
@@ -162,7 +162,7 @@ eval-results/<system>/<timestamp>/
 
 - **Q1**: Source for 300 mock tasks. Plan: 50 translated from LSC archive, 50 from AIC HCMC public materials, 100 team-generated, 100 adversarial via Gemini. Authoring this corpus is its own workstream (~1 engineer-week); does it warrant its own SPEC-NNNN? Recommend: yes (`SPEC-0001a` or a fresh ID).
 - **Q2**: Should `bin/eval --mode interactive` record operator clicks via a browser-extension or via the React UI's own logging? Recommend the latter (no extension needed), but it pushes a dependency on SPEC-0012.
-- **Q3**: CI threshold values in ß5 AC7 are placeholders. They must be calibrated against the v0.0.1 baseline before being enforced. Open a follow-up issue to lock the thresholds after Phase 1.
+- **Q3**: CI threshold values in ù5 AC7 are placeholders. They must be calibrated against the v0.0.1 baseline before being enforced. Open a follow-up issue to lock the thresholds after Phase 1.
 - **Q4**: Concurrency limit. At `--concurrency > 1`, do we share a single backend or spin up replicas? Recommend single backend (the system under test is what we are measuring), with rate-limiting at the harness side.
 
 ## 10. Changelog
@@ -170,3 +170,4 @@ eval-results/<system>/<timestamp>/
 | Date | Author | Change |
 |---|---|---|
 | 2026-05-26 | team lead | Created (Draft) |
+| 2026-05-28 | implementer | Approved. Tier 1 (AC1 + AC2 + AC4) implementation PR opens against branch `spec/0001-tier1-stub-harness`. Tier 2 (AC3 + DRES wiring) and Tier 3 (AC5-AC8) tracked as follow-up PRs against this same spec. |

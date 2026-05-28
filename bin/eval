@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# POSIX wrapper for the `eval` entry point.
+#
+# Cross-platform note: on Windows, `uv sync` registers `eval.exe` in the
+# venv's Scripts directory (per pyproject.toml [project.scripts]), and
+# `uv run eval ...` works without this wrapper. This script exists so
+# Linux/Mac users can run `./bin/eval ...` directly from a clone.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+exec uv run eval "$@"

@@ -1,0 +1,2 @@
+# Reserved for `bin/eval` run outputs. Per-run subdirectories follow
+# the schema `eval-results/<system>/<utc-timestamp>/` (SPEC-0001 SS 3.3).

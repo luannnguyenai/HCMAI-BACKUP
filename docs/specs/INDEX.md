@@ -12,7 +12,7 @@
 
 | ID | Title | Status | Owner | Proposal | Notes |
 |---|---|---|---|---|---|
-| [SPEC-0001](SPEC-0001-evaluation-harness.md) | Evaluation harness (mock-DRES + 300-task set) | Draft | _unassigned_ | 05 | Foundational; gate for everything else |
+| [SPEC-0001](SPEC-0001-evaluation-harness.md) | Evaluation harness (mock-DRES + 300-task set) | Approved | _unassigned_ | 05 | Foundational; gate for everything else. Tier 1 (AC1+AC2+AC4) implementation in flight on branch `spec/0001-tier1-stub-harness` |
 | [SPEC-0002](SPEC-0002-llm-path-bakeoff-runner.md) | LLM path bakeoff runner | Draft | team lead | 09 | Owns the June 25 decision |
 | _SPEC-0003_ | Data ingestion pipeline | _reserved_ | _unassigned_ | 03 | TransNetV2 + keyframe + audio extraction |
 | _SPEC-0004_ | Image-embedding service | _reserved_ | _unassigned_ | 01 SS 5.3 | SigLIP-2 + Meta CLIP 2 + InternVideo2 |
