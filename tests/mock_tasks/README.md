@@ -45,10 +45,19 @@ from AIC HCMC public materials, 100 team-generated, 100 adversarial via
 Gemini. Authoring it is ~1 engineer-week and is gated by access to the
 2026 dataset (Phase 1, post-June-25).
 
-Vietnamese text uses ASCII transliteration (no diacritics) for now to
-sidestep the same Windows-PowerShell encoding gotchas documented in
-[AGENTS.md](../../AGENTS.md). The real corpus will use proper diacritics
-once Phase 1 ingestion is ready and the encoding pipeline is validated.
+Vietnamese text in `query_vi` and in QA `qa_answer` fields uses **full
+Vietnamese diacritics** (UTF-8). This mirrors what the real competition
+queries will look like and makes the smoke set a meaningful test of the
+UTF-8 path through the harness. Every `.jsonl` file in this directory
+must be UTF-8 encoded; the loader opens with `encoding="utf-8"` and the
+JSON writer emits with `ensure_ascii=False`.
+
+Diacritic-stripping must **not** happen anywhere on the retrieval path:
+the asciifolding analyser that strips Vietnamese tones is exactly the
+failure mode documented in
+[research-note 05 §4.1](../../docs/research-notes/05-baseline-2025-analysis.md)
+and attacked by [ADR-0007](../../docs/adr/ADR-0007-original-contributions-c1-c2-c4.md)
+C1 DiacriticBERT.
 
 ## Adding a task
 
