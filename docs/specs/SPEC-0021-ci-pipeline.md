@@ -1,7 +1,7 @@
 ---
 id: SPEC-0021
 title: Continuous integration pipeline (lint + test + smoke-eval gate)
-status: Implementing
+status: Implemented
 owner: unassigned
 created: 2026-05-29
 updated: 2026-05-29
@@ -109,3 +109,4 @@ The job exit code is the contract: **0 iff** format-check, lint, all tests, and 
 | Date | Author | Change |
 |---|---|---|
 | 2026-05-29 | implementer (user-directed) | Created; Draft -> Approved -> Implementing in one pass for solo work per CONTRIBUTING. Implementation PR opens against branch `spec/0021-ci-pipeline`. |
+| 2026-05-29 | implementer | Merged in PR #6; status -> Implemented. |

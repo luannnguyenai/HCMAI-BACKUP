@@ -32,7 +32,7 @@
 | [SPEC-0018](SPEC-0018-dres-integration.md) | DRES integration client | Draft | _unassigned_ | 05 | Login + submit; borrows from 2025 baseline under [ADR-0010](../adr/ADR-0010-borrow-from-2025-baseline.md). Prod URL: `https://eventretrieval.oj.io.vn` |
 | _SPEC-0019_ | Operator trace logger | _reserved_ | _unassigned_ | 02 SS 8 | Feeds C4; Parquet append-only |
 | [SPEC-0020](SPEC-0020-ndcg-at-10-metric.md) | NDCG@10 ranking metric in the eval harness | Implemented | _unassigned_ | 05 SS 14 | C2 ship-gate metric ([ADR-0007](../adr/ADR-0007-original-contributions-c1-c2-c4.md), [ADR-0008](../adr/ADR-0008-rrf-as-runtime-fallback.md)); extends SPEC-0001 harness. Merged in PR #5 |
-| [SPEC-0021](SPEC-0021-ci-pipeline.md) | CI pipeline (lint + test + smoke-eval gate) | Implementing | _unassigned_ | 05 SS 6 | GitHub Actions; enforces per-PR smoke ([ADR-0009](../adr/ADR-0009-sdd-workflow.md)). Score-threshold gating deferred to SPEC-0001 AC7 |
+| [SPEC-0021](SPEC-0021-ci-pipeline.md) | CI pipeline (lint + test + smoke-eval gate) | Implemented | _unassigned_ | 05 SS 6 | GitHub Actions; enforces per-PR smoke ([ADR-0009](../adr/ADR-0009-sdd-workflow.md)). Score-threshold gating deferred to SPEC-0001 AC7. Merged in PR #6 |
 
 ## Cross-cutting prior art
 
