@@ -15,7 +15,7 @@
 | [SPEC-0001](SPEC-0001-evaluation-harness.md) | Evaluation harness (mock-DRES + 300-task set) | Approved | _unassigned_ | 05 | Foundational; gate for everything else. Tier 1 (AC1+AC2+AC4) implementation in flight on branch `spec/0001-tier1-stub-harness` |
 | [SPEC-0002](SPEC-0002-llm-path-bakeoff-runner.md) | LLM path bakeoff runner | Draft | team lead | 09 | Owns the June 25 decision |
 | _SPEC-0003_ | Data ingestion pipeline | _reserved_ | _unassigned_ | 03 | Organisers ship keyframes + OD; shot detection (TransNetV2 / AutoShot / TransVLM) demoted to Phase 2 contingency. See [research-note 06 SS 2.2](../research-notes/06-aic2026-dataset-shape.md) |
-| _SPEC-0004_ | Image-embedding service | _reserved_ | _unassigned_ | 01 SS 5.3 | SigLIP-2 + Meta CLIP 2 + InternVideo2. Add organisers' pre-computed CLIP as a 4th baseline lane (research-note 06 SS 2.3) |
+| [SPEC-0004](SPEC-0004-image-embedding-service.md) | Image-embedding service | Implementing | _unassigned_ | 01 SS 5.3 | SigLIP-2 + Meta CLIP 2 + InternVideo2. Slice in PR: `Embedder` protocol + `DummyEmbedder` + SigLIP-2 + `bin/embed` extraction CLI. Add organisers' pre-computed CLIP as a 4th baseline lane in SPEC-0006 (research-note 06 SS 2.3) |
 | _SPEC-0005_ | OCR + ASR ingestion (yt-dlp primary, PhoWhisper fallback) | _reserved_ | _unassigned_ | 01 SS 5.5?5.6 | PaddleOCR + two-source ASR: yt-dlp YouTube captions primary, PhoWhisper fallback (research-note 06 SS 2.1). Provenance tracked via `source: yt-dlp / phowhisper` |
 | _SPEC-0006_ | Milvus schema and queries | _reserved_ | _unassigned_ | 01 SS 5.4 | Hybrid vector + structured filter; structured columns include organisers' `youtube_url`, `description`, OD tags. Optional 4th dense field `clip_organiser` for the provided baseline embedding (research-note 06 SS 2.4) |
 | _SPEC-0007_ | Elasticsearch schema and queries | _reserved_ | _unassigned_ | 01 SS 5.4 | OCR / ASR / caption / `description` indexes. **Must NOT use `asciifolding` filter on Vietnamese text ? strips diacritics** (research-note 05 SS 4.1). `description` from organiser metadata adds a 4th text lane (research-note 06 SS 2.4) |
@@ -32,7 +32,7 @@
 | [SPEC-0018](SPEC-0018-dres-integration.md) | DRES integration client | Draft | _unassigned_ | 05 | Login + submit; borrows from 2025 baseline under [ADR-0010](../adr/ADR-0010-borrow-from-2025-baseline.md). Prod URL: `https://eventretrieval.oj.io.vn` |
 | _SPEC-0019_ | Operator trace logger | _reserved_ | _unassigned_ | 02 SS 8 | Feeds C4; Parquet append-only |
 | [SPEC-0020](SPEC-0020-ndcg-at-10-metric.md) | NDCG@10 ranking metric in the eval harness | Implemented | _unassigned_ | 05 SS 14 | C2 ship-gate metric ([ADR-0007](../adr/ADR-0007-original-contributions-c1-c2-c4.md), [ADR-0008](../adr/ADR-0008-rrf-as-runtime-fallback.md)); extends SPEC-0001 harness. Merged in PR #5 |
-| [SPEC-0021](SPEC-0021-ci-pipeline.md) | CI pipeline (lint + test + smoke-eval gate) | Implementing | _unassigned_ | 05 SS 6 | GitHub Actions; enforces per-PR smoke ([ADR-0009](../adr/ADR-0009-sdd-workflow.md)). Score-threshold gating deferred to SPEC-0001 AC7 |
+| [SPEC-0021](SPEC-0021-ci-pipeline.md) | CI pipeline (lint + test + smoke-eval gate) | Implemented | _unassigned_ | 05 SS 6 | GitHub Actions; enforces per-PR smoke ([ADR-0009](../adr/ADR-0009-sdd-workflow.md)). Score-threshold gating deferred to SPEC-0001 AC7. Merged in PR #6 |
 
 ## Cross-cutting prior art
 
