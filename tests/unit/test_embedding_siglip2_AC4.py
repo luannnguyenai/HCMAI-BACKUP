@@ -40,7 +40,8 @@ def test_siglip2_module_does_not_import_torch_at_import_time_AC4() -> None:
 
 def test_siglip2_module_exposes_canonical_constants_AC4() -> None:
     assert siglip2_module.MODEL_ID == "siglip2-so400m-p16-384"
-    assert siglip2_module.DIM == 1024
+    # 1152 = So400m embedding width, verified on H200 hardware 2026-05-30.
+    assert siglip2_module.DIM == 1152
     assert siglip2_module.IMAGE_SIZE == 384
 
 
@@ -53,6 +54,6 @@ def test_siglip2_encode_text_with_real_deps_AC4() -> None:
 
     emb = SigLip2Embedder(device="cpu", dtype="float32")
     out = emb.encode_text(["hello world"])
-    assert out.shape == (1, 1024)
+    assert out.shape == (1, 1152)
     norms = (out**2).sum(axis=1) ** 0.5
     assert abs(float(norms[0]) - 1.0) < 1e-3

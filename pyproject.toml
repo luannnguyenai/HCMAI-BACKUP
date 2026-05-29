@@ -20,9 +20,16 @@ dependencies = [
 # SPEC-0004: real image-text encoder backbones. Not installed in CI - the
 # DummyEmbedder is what unit tests exercise. Install locally via
 # `uv sync --extra embedding` to run SigLip2Embedder against real weights.
+# transformers + sentencepiece are REQUIRED (not optional): open_clip loads
+# SigLIP-2's tokenizer via transformers.AutoTokenizer, which is SentencePiece-
+# backed. Discovered on H200 2026-05-30 (spec/0023). huggingface-hub powers
+# the cache-weights job (SPEC-0022).
 embedding = [
     "torch>=2.4",
     "open-clip-torch>=2.32",
+    "transformers>=4.45",
+    "sentencepiece>=0.2",
+    "huggingface-hub>=0.24",
     "pillow>=10",
 ]
 

@@ -78,6 +78,16 @@ class R2Client:
         resp = self._s3.get_object(Bucket=self.bucket, Key=key)
         return resp["Body"].read()
 
+    def upload_file(self, local_path: Path, key: str) -> None:
+        """Stream a single file to `key` via boto3's managed transfer.
+
+        Unlike `upload_dir` (which reads whole files into memory for a single
+        PUT), this uses `s3.upload_file`, which streams from disk and does
+        multipart automatically for large objects. Required for model weights
+        whose safetensors shards exceed the ~5 GB single-PUT limit.
+        """
+        self._s3.upload_file(str(local_path), self.bucket, key)
+
     # --- directories -------------------------------------------------------
 
     def upload_dir(self, local: Path, prefix: str) -> list[str]:

@@ -20,7 +20,7 @@ depends_on:
 
 ## 1. Context
 
-[`docs/proposals/01-interactive-system-architecture.md`](../proposals/01-interactive-system-architecture.md) SS 5.3 names the three encoders that form the floor of the retrieval ensemble: **SigLIP-2 So400m/16@384** (primary, 1024-d), **Meta CLIP 2 ViT-H/14** (Vietnamese-capable, 1024-d), and **InternVideo2-Stage2_1B-224p-f4** (video, 768-d). [ADR-0003](../adr/ADR-0003-rtx5070-finals-gh200-offline.md) splits the workload: **image towers run offline on the GH200** and produce pre-indexed vectors; **only text towers run online** on the 12 GB RTX 5070 (query encoding). [ADR-0007](../adr/ADR-0007-original-contributions-c1-c2-c4.md) makes the floor a precondition for C1/C2/C4 - none of the original-contribution ablations can run against a real backend until embeddings exist.
+[`docs/proposals/01-interactive-system-architecture.md`](../proposals/01-interactive-system-architecture.md) SS 5.3 names the three encoders that form the floor of the retrieval ensemble: **SigLIP-2 So400m/16@384** (primary, **1152-d** - verified on H200 hardware 2026-05-30; proposal-01 originally mis-stated 1024), **Meta CLIP 2 ViT-H/14** (Vietnamese-capable, 1024-d, unverified), and **InternVideo2-Stage2_1B-224p-f4** (video, 768-d, unverified). [ADR-0003](../adr/ADR-0003-rtx5070-finals-gh200-offline.md) splits the workload: **image towers run offline on the GH200** and produce pre-indexed vectors; **only text towers run online** on the 12 GB RTX 5070 (query encoding). [ADR-0007](../adr/ADR-0007-original-contributions-c1-c2-c4.md) makes the floor a precondition for C1/C2/C4 - none of the original-contribution ablations can run against a real backend until embeddings exist.
 
 Today the harness exercises a `StubBackend` only (SPEC-0001 Tier 1). This spec adds the embedding layer; storage and query (Milvus) live in SPEC-0006; ranker composition into a `Backend.search` impl is SPEC-0015.
 
@@ -32,7 +32,7 @@ The full dataset releases on June 25, 2026. Per [`docs/research-notes/06-aic2026
 - A single `Embedder` Protocol with `encode_text(list[str]) -> ndarray` and `encode_image(list[Path]) -> ndarray`. Vectors are `float32`, `(n, dim)`, L2-normalised.
 - Concrete implementations:
   - **`DummyEmbedder`** - deterministic, numpy-only, CPU-only. The default for CI and for tests across the rest of the package.
-  - **`SigLip2Embedder`** - real SigLIP-2 So400m/16@384, 1024-d. Lazy-imports `torch` + `open_clip` inside methods; gated behind a `[project.optional-dependencies] embedding` extra.
+  - **`SigLip2Embedder`** - real SigLIP-2 So400m/16@384, **1152-d**. Lazy-imports `torch` + `open_clip` inside methods; needs `transformers` + `sentencepiece` for the HF tokenizer (added to the extra). Gated behind a `[project.optional-dependencies] embedding` extra.
 - An offline extraction module `aic2026.embedding.extract` that batches a directory of images through an `Embedder` and writes:
   - `<out>.npy` - a `float32` matrix of shape `(n, dim)`
   - `<out>.manifest.jsonl` - one row per vector with `{row, frame_id, path}`, byte-for-byte aligned with the matrix.
@@ -66,7 +66,7 @@ class Embedder(Protocol):
     """
 
     model_id: str            # stable identifier; e.g. "siglip2-so400m-p16-384"
-    dim: int                 # output dimensionality; e.g. 1024 for SigLIP-2
+    dim: int                 # output dimensionality; 1152 for SigLIP-2 So400m
 
     def encode_text(self, texts: list[str]) -> np.ndarray: ...
     def encode_image(self, paths: list[Path]) -> np.ndarray: ...
@@ -119,7 +119,7 @@ bin/embed text   --text "..."             [--encoder dummy|siglip2] [--dim 1024]
 - **AC1**: For any `Embedder`, `encode_text(list-of-length-n)` and `encode_image(list-of-length-n)` return a `float32` `(n, dim)` array whose rows have L2 norm `1.0 +- 1e-3` and whose `dim` matches the encoder's `dim`. Verified in `tests/unit/test_embedding_dummy_AC1.py`.
 - **AC2**: `DummyEmbedder` is deterministic per `(model_id, dim, input)` and distinct inputs yield distinct vectors (no collisions on the unit test inputs). Verified in `tests/unit/test_embedding_dummy_AC2.py`.
 - **AC3**: `extract_image_embeddings` over a directory of `n` fake files yields `.npy` with shape `(n, dim)` and `.manifest.jsonl` whose row count and `frame_id`s match, in deterministic sort order. Re-running on the same input produces byte-identical outputs. Verified in `tests/unit/test_embedding_extract_AC3.py`.
-- **AC4**: `SigLip2Embedder` lazy-loads its heavy deps (no `import torch` at module import time) and, when those deps are present, returns `1024`-d L2-normalised vectors for both `encode_text` and `encode_image`. The test uses `pytest.importorskip("torch")` and skips in CI (the `embedding` extra is not installed in CI by design). Verified in `tests/unit/test_embedding_siglip2_AC4.py`.
+- **AC4**: `SigLip2Embedder` lazy-loads its heavy deps (no `import torch` at module import time) and, when those deps are present, returns `1152`-d L2-normalised vectors for both `encode_text` and `encode_image`. The test uses `pytest.importorskip("torch")` and skips in CI (the `embedding` extra is not installed in CI by design). Verified in `tests/unit/test_embedding_siglip2_AC4.py` and confirmed on H200 hardware 2026-05-30.
 - **AC5**: The spec and module docstrings document the offline-only nature of `encode_image` (ADR-0003) and the optional-extra packaging of the heavy backbones (ADR-0006). Verified by inspection (no test).
 
 ## 6. Non-functional requirements
@@ -127,14 +127,14 @@ bin/embed text   --text "..."             [--encoder dummy|siglip2] [--dim 1024]
 - **Latency** (slice): `DummyEmbedder.encode_text([q])` <= 5 ms on CPU; extraction over 100 fake files <= 1 s on CPU. SigLIP-2 latency targets land with the GH200 / 5070 deploy spec, not here.
 - **Memory**: `DummyEmbedder` allocates `n * dim * 4` bytes; the extractor streams batches and does not pin the full corpus in memory before write-out (we still build the matrix in-process for the slice; a streamed-write variant lands when `n` exceeds RAM, deferred).
 - **Determinism**: SHA-256-seeded numpy RNG inside `DummyEmbedder`. No global RNG state.
-- **Compatibility**: Python 3.11+, NumPy >= 1.26. SigLIP-2 backbone: `torch >= 2.4`, `open-clip-torch` or `transformers`, `pillow`. CI installs neither - they are in the `embedding` extra.
+- **Compatibility**: Python 3.11+, NumPy >= 1.26. SigLIP-2 backbone: `torch >= 2.4`, `open-clip-torch`, plus `transformers` + `sentencepiece` (the SigLIP-2 tokenizer is an HF SentencePiece tokenizer - NOT optional, confirmed on H200 2026-05-30). CI installs none of these - they are in the `embedding` extra.
 
 ## 7. Dependencies
 
 - **Internal**: SPEC-0001 (`Submission`/`MockTask` are not consumed here; the dependency is the harness scaffolding + the CI gate from SPEC-0021).
 - **External**:
   - Core (always installed): `numpy >= 1.26`.
-  - Optional `embedding` extra: `torch >= 2.4`, `open-clip-torch >= 2.32` (or `transformers >= 4.45`), `pillow >= 10`.
+  - Optional `embedding` extra: `torch >= 2.4`, `open-clip-torch >= 2.32`, `transformers >= 4.45`, `sentencepiece >= 0.2`, `huggingface-hub >= 0.24`, `pillow >= 10`. (`transformers` + `sentencepiece` are required, not alternatives: open_clip loads SigLIP-2's tokenizer via `transformers.AutoTokenizer`, which needs SentencePiece. Discovered when the H200 run failed with `ModuleNotFoundError: No module named 'transformers'`.)
 - **Data**: synthetic / fake files in `tmp_path` for the slice tests. Real corpus integration is post-June-25 and tracked by a follow-up under SPEC-0006.
 
 ## 8. Test plan
@@ -143,7 +143,7 @@ bin/embed text   --text "..."             [--encoder dummy|siglip2] [--dim 1024]
   - `test_embedding_dummy_AC1.py` - shape, dtype, dim, L2 norm.
   - `test_embedding_dummy_AC2.py` - deterministic + input-distinct.
   - `test_embedding_extract_AC3.py` - extract over `tmp_path` fake files, manifest alignment, run-to-run byte-equality.
-  - `test_embedding_siglip2_AC4.py` - `pytest.importorskip("torch")`; asserts 1024-d normalised on a synthetic image when deps are present (skipped in CI).
+  - `test_embedding_siglip2_AC4.py` - `pytest.importorskip("torch")`; asserts 1152-d normalised on a synthetic image when deps are present (skipped in CI).
 - **CLI smoke** (local mirror of the CI smoke):
   - `./bin/embed images --input <tmpdir> --output <tmp>/v --encoder dummy --dim 64` produces `<tmp>/v.npy` and `<tmp>/v.manifest.jsonl`; exit 0.
   - `./bin/embed text --text "hello" --encoder dummy --dim 64` prints a 64-d normalised vector; exit 0.
@@ -159,3 +159,4 @@ bin/embed text   --text "..."             [--encoder dummy|siglip2] [--dim 1024]
 | Date | Author | Change |
 |---|---|---|
 | 2026-05-29 | implementer (user-directed) | Created; Draft -> Approved -> Implementing in one pass for solo work per CONTRIBUTING. Slice (DummyEmbedder + SigLip2Embedder + extraction CLI) ships in branch `spec/0004-image-embedding-service`; Meta CLIP 2 + InternVideo2 land in follow-up PRs against this spec. |
+| 2026-05-30 | implementer | H200 lease findings (spec/0023): SigLIP-2 So400m dim corrected 1024 -> **1152** (verified on hardware); `transformers` + `sentencepiece` + `huggingface-hub` added to the `embedding` extra (were missing, broke the tokenizer load). |

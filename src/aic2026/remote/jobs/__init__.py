@@ -6,6 +6,9 @@ once; every job module listed below is then in the registry and resolvable
 via `aic2026.remote.registry.resolve(name)`.
 """
 
-from aic2026.remote.jobs import extract_siglip  # noqa: F401  (import for side effect)
+from aic2026.remote.jobs import (
+    cache_weights,  # noqa: F401  (import for side effect)
+    extract_siglip,  # noqa: F401  (import for side effect)
+)
 
 __all__: list[str] = []
