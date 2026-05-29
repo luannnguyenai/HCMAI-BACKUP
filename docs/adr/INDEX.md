@@ -22,3 +22,4 @@
 | [ADR-0008](ADR-0008-rrf-as-runtime-fallback.md) | RRF is the fallback; C2 is the default fusion | Accepted | 2026-05-24 | Inverts the original proposal stance |
 | [ADR-0009](ADR-0009-sdd-workflow.md) | Spec-Driven Development is the workflow | Accepted | 2026-05-26 | The workflow itself |
 | [ADR-0010](ADR-0010-borrow-from-2025-baseline.md) | Borrow from the 2025 baseline repo under attribution | Accepted | 2026-05-26 | Policy + per-file header + `THIRD_PARTY.md` |
+| [ADR-0011](ADR-0011-r2-artifact-store-and-lease-rollover.md) | Cloudflare R2 as the artifact store; 4-tier persistence across lease rollovers | Accepted | 2026-05-29 | Implemented in [SPEC-0022](../specs/SPEC-0022-remote-gpu-runner.md) |
