@@ -23,10 +23,13 @@ import numpy as np
 
 from aic2026.embedding.base import l2_normalize
 
-# Canonical SigLIP-2 So400m/16@384 reference. Per docs/proposals/01 SS 5.3
-# the dim is 1024 and the resize spec is 384x384.
+# Canonical SigLIP-2 So400m/16@384 reference.
+# DIM is the So400m embedding width = 1152, VERIFIED on real hardware
+# (8x H200 lease, 2026-05-30): `encode_text(["xin chao"]).shape == (1, 1152)`.
+# Note: proposal-01 SS 5.3 originally claimed 1024-d; that was an unverified
+# number and is wrong for So400m. Do not "correct" this back to 1024.
 MODEL_ID: str = "siglip2-so400m-p16-384"
-DIM: int = 1024
+DIM: int = 1152
 IMAGE_SIZE: int = 384
 
 _EXTRA_HINT = (

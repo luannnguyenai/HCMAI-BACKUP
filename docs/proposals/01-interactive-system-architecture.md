@@ -92,8 +92,8 @@ text query (Vietnamese)
 ### 2.3 Vector and text storage
 
 - **Milvus** (single deployment, multi-collection)
-  - `collection_siglip2` (1024-d float)
-  - `collection_metaclip2` (1024-d float)
+  - `collection_siglip2` (1152-d float; So400m width, verified on H200 2026-05-30)
+  - `collection_metaclip2` (1024-d float; ViT-H/14, unverified)
   - `collection_internvideo2` (768-d float)
   - `collection_clap_audio` (512-d float)
   - structured fields per row: `video_id`, `frame_id`, `timestamp`, `shot_id`, `place_label`, `adl_label`, `object_tags[]`, `duration_ms`
@@ -179,9 +179,9 @@ Notes:
 
 **SigLIP-2 So400m/16@384** at fp16:
 - 400M params, ~10 GB VRAM
-- 1024-d output
+- **1152-d output** (So400m width; verified on H200 2026-05-30 - earlier "1024" was an unverified number)
 - Pre-process: resize to 384x384, normalize per model card
-- Batch 256 on A6000 -> ~10K frames/min
+- Batch 256 on A6000 -> ~10K frames/min (throughput TBD - benchmark on the actual lease)
 
 **Meta CLIP 2 ViT-H/14** at fp16:
 - ~1B params, ~16 GB VRAM

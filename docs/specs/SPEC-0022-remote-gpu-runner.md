@@ -31,16 +31,18 @@ depends_on:
 - A new `bin/remote` CLI with six subcommands: `setup`, `provision`, `run`, `pull`, `list`, `teardown`.
 - A `RunContext` Pydantic model with stable `run_id` and provenance fields.
 - A `ManifestEntry` Pydantic model + append-only R2 ledger at `manifest/<key>.json` (one object per entry to avoid append races).
-- An `R2Client` wrapping `boto3` against R2's `endpoint_url`, with `upload_dir / list / download_dir`.
+- An `R2Client` wrapping `boto3` against R2's `endpoint_url`, with `upload_dir / upload_file / list / download_dir`. (`upload_file` streams via boto3 managed transfer for multi-GB model shards; `upload_dir` is the in-memory path for small artifacts.)
 - An `ssh_exec` wrapper around `subprocess` for cluster ops.
 - Four launchers: `srun` (default; SLURM interactive), `sbatch` (SLURM queued, via templated `infra/remote/slurm.sbatch.tpl`), `ssh` (login-node only), `local` (no remote at all - testing).
-- A job registry (`@register("name")`) + one job (`extract-siglip`) wiring SPEC-0004's `SigLip2Embedder` end to end.
+- A job registry (`@register("name")`) with two jobs:
+  - `extract-siglip` - wires SPEC-0004's `SigLip2Embedder` end to end.
+  - `cache-weights` (spec/0023) - mirrors HuggingFace model snapshots to a **stable** `weights/<repo_id>/` R2 prefix so ephemeral leases (ADR-0011) restore floor weights in minutes instead of re-downloading. Model list is config-driven (`--config repos=a,b,c`), per-repo fault-tolerant, and uses `upload_file` for the large shards.
 - `.env.remote.example` committed; real `.env.remote` gitignored.
 - Six CPU-safe AC tests using `moto` for R2 mocking and `subprocess.run` mocks for SSH.
 
 ### 2.2 Out of scope
 
-- Meta CLIP 2 / InternVideo2 / Qwen-VL / training jobs - each lands as a follow-up job behind the same `bin/remote run <job>` interface.
+- Encoder/training *compute* jobs beyond `extract-siglip` (Meta CLIP 2 / InternVideo2 extraction, C1 training, captioning) - each lands as a follow-up job behind the same `bin/remote run <job>` interface. (`cache-weights` only *downloads + mirrors* weights; it runs no model.)
 - Cluster-discovery or lease-acquisition automation - we expect a working `~/.ssh/config Host aic2026-gpu` alias before `bin/remote setup`.
 - Multi-tenant R2 (per-user prefixes, quotas) - single shared bucket for the team for now (ADR-0011 flags as follow-up).
 - Cost accounting and orphan-blob GC - tracked manually; `bin/remote prune` is a follow-up spec.
@@ -147,6 +149,7 @@ bin/remote teardown --confirm
 - **AC5**: `registry.resolve(name)` returns the registered callable; an unknown name raises `KeyError` whose message contains the available names. Verified in `tests/unit/test_remote_registry_AC5.py`.
 - **AC6**: `bin/remote run extract-siglip --dry-run` exits 0, prints the planned `ssh`/`srun`/R2 actions to stdout, and writes nothing to disk or the network. Verified in `tests/unit/test_remote_cli_dry_run_AC6.py`.
 - **AC7** (manual; pasted into the PR by the user after a real cluster run): `bin/remote run extract-siglip --launcher srun --input-dir <small-sample-dir>` produces `runs/<run_id>/v.npy` + `runs/<run_id>/v.manifest.jsonl` in R2 plus a ledger entry; `bin/remote pull <run_id>` retrieves them locally.
+- **AC8** (spec/0023): `cache-weights` mirrors each configured HF repo to `weights/<repo_id>/` on R2 with a `.cache-meta.json` marker, is per-repo fault-tolerant (one bad id does not abort the batch), and uses streaming `upload_file` for large shards. Verified against `moto` with a mocked `snapshot_download` in `tests/unit/test_remote_cache_weights_AC8.py`; large-model end-to-end confirmed on the H200 lease.
 
 ## 6. Non-functional requirements
 
@@ -183,3 +186,4 @@ bin/remote teardown --confirm
 | Date | Author | Change |
 |---|---|---|
 | 2026-05-29 | implementer (user-directed) | Created; Draft -> Approved -> Implementing in one pass for solo work per CONTRIBUTING. Slice (skeleton + extract-siglip) ships in branch `spec/0022-remote-gpu-runner`. AC7 (real cluster run) pasted into the PR by the user. |
+| 2026-05-30 | implementer | spec/0023: added `cache-weights` job + AC8 + `R2Client.upload_file` (streaming). First real H200 lease surfaced merged-code bugs fixed alongside (SigLIP-2 dim 1024->1152, missing `transformers`/`sentencepiece` in the embedding extra). |
