@@ -17,6 +17,9 @@ venv/
 env/
 .env
 .env.local
+.env.remote
+# Keep committed *.example templates so contributors know the schema
+!.env.*.example
 pip-wheel-metadata/
 *.egg-info/
 .eggs/
