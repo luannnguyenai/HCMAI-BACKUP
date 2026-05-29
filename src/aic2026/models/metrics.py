@@ -1,4 +1,5 @@
 # Implements SPEC-0001 SS 3.3 (metrics.json shape) and AC4.
+# Implements SPEC-0020 SS 3 (NDCG@10 fields + schema_version bump).
 """Aggregate and per-task metric shapes emitted by `bin/eval`.
 
 The `AggregateMetrics` instance is what gets serialised to `metrics.json` at
@@ -38,6 +39,8 @@ class TaskMetrics(BaseModel):
     r_at_5: float = Field(ge=0.0, le=1.0)
     r_at_10: float = Field(ge=0.0, le=1.0)
     mrr: float = Field(ge=0.0, le=1.0)
+    # NDCG@10 (SPEC-0020); binary-gain. C2 learned-fusion ship-gate metric.
+    ndcg_at_10: float = Field(ge=0.0, le=1.0)
 
     # KIS-specific (null on other task types).
     time_to_first_correct_ms: float | None = Field(default=None, ge=0.0)
@@ -67,6 +70,7 @@ class TaskTypeAggregate(BaseModel):
     mean_r_at_5: float = Field(ge=0.0, le=1.0)
     mean_r_at_10: float = Field(ge=0.0, le=1.0)
     mean_mrr: float = Field(ge=0.0, le=1.0)
+    mean_ndcg_at_10: float = Field(ge=0.0, le=1.0)  # SPEC-0020
     mean_kis_score: float | None = None
     mean_adhoc_score: float | None = None
     wrong_submissions_per_task: float = Field(ge=0.0)
@@ -78,8 +82,11 @@ class AggregateMetrics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: str = Field(
-        default="1",
-        description="Bump on breaking changes; consumers may pin a major.",
+        default="2",
+        description=(
+            "Bump on breaking changes; consumers may pin a major. "
+            "v2 (SPEC-0020): added ndcg_at_10 / mean_ndcg_at_10."
+        ),
     )
     system: str
     run_id: str

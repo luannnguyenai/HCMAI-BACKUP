@@ -1,4 +1,5 @@
 # Implements SPEC-0001 SS 4 (scoring) and proposal 05 SS 11 (formulas).
+# Implements SPEC-0020 SS 3-4 (NDCG@10).
 """Pure scoring functions.
 
 All functions in this module are pure: no I/O, no hidden state, deterministic
@@ -9,6 +10,8 @@ LSC review (see `docs/research-notes/02-lsc-vbs-systems-deep-dive.md` SS 2).
 """
 
 from __future__ import annotations
+
+import math
 
 from aic2026.models.submission import Submission
 from aic2026.models.task import GroundTruth, MockTask, TaskType
@@ -79,6 +82,47 @@ def adhoc_recall_at_k(
     top_k = submissions[:k]
     hits = sum(1 for s in top_k if s.frame_id in correct_ids)
     return hits / len(correct_ids)
+
+
+# --- NDCG (SPEC-0020) ------------------------------------------------------
+
+
+def dcg_at_k(submissions: list[Submission], correct_ids: set[str], k: int) -> float:
+    """Discounted cumulative gain at k with binary gains (SPEC-0020 SS 3).
+
+    DCG@k = sum_{i=1..k} rel_i / log2(i + 1), where rel_i is 1 if the i-th
+    submission's frame_id is in `correct_ids`, else 0. Submissions are assumed
+    sorted by `rank` ascending (rank 1 first). Items beyond k do not contribute.
+    """
+    if k <= 0:
+        raise ValueError(f"k must be positive; got {k}")
+    dcg = 0.0
+    for position, s in enumerate(submissions[:k], start=1):
+        if s.frame_id is not None and s.frame_id in correct_ids:
+            dcg += 1.0 / math.log2(position + 1)
+    return dcg
+
+
+def ndcg_at_k(submissions: list[Submission], correct_ids: set[str], k: int) -> float:
+    """Normalised DCG at k with binary gains (SPEC-0020 SS 3-4).
+
+    NDCG@k = DCG@k / IDCG@k, where IDCG@k is the DCG of the ideal ranking
+    (all relevant items first):
+        IDCG@k = sum_{i=1..min(|correct_ids|, k)} 1 / log2(i + 1).
+    Returns 0.0 when there are no relevant items or IDCG@k is 0.
+    Binary gains are used because the harness ground truth is binary; graded
+    relevance is deferred (SPEC-0020 SS 9 Q1).
+    """
+    if k <= 0:
+        raise ValueError(f"k must be positive; got {k}")
+    if not correct_ids:
+        return 0.0
+    dcg = dcg_at_k(submissions, correct_ids, k)
+    n_ideal = min(len(correct_ids), k)
+    idcg = sum(1.0 / math.log2(i + 1) for i in range(1, n_ideal + 1))
+    if idcg == 0.0:
+        return 0.0
+    return dcg / idcg
 
 
 # --- Task scores (the LSC formulas) ----------------------------------------
@@ -196,12 +240,14 @@ def score_task(
     r5 = r_at_k(submissions, correct_id_set, 5) if correct_id_set else 0.0
     r10 = r_at_k(submissions, correct_id_set, 10) if correct_id_set else 0.0
     mean_rr = mrr(submissions, correct_id_set) if correct_id_set else 0.0
+    ndcg10 = ndcg_at_k(submissions, correct_id_set, 10) if correct_id_set else 0.0
 
     out: dict[str, float | int | bool | None] = {
         "r_at_1": r1,
         "r_at_5": r5,
         "r_at_10": r10,
         "mrr": mean_rr,
+        "ndcg_at_10": ndcg10,
         "end_to_end_ms": elapsed_ms,
         "wrong_submissions": 0,
         "time_to_first_correct_ms": None,
@@ -268,6 +314,7 @@ def score_task(
         out["r_at_5"] = out["r_at_1"]
         out["r_at_10"] = out["r_at_1"]
         out["mrr"] = out["r_at_1"]
+        out["ndcg_at_10"] = out["r_at_1"]
         if ok:
             out["time_to_first_correct_ms"] = elapsed_ms
             out["kis_score"] = kis_score(

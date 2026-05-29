@@ -31,6 +31,7 @@
 | _SPEC-0017_ | LangGraph automatic-track agent | _reserved_ | _unassigned_ | 02 | State machine + retry loop |
 | [SPEC-0018](SPEC-0018-dres-integration.md) | DRES integration client | Draft | _unassigned_ | 05 | Login + submit; borrows from 2025 baseline under [ADR-0010](../adr/ADR-0010-borrow-from-2025-baseline.md). Prod URL: `https://eventretrieval.oj.io.vn` |
 | _SPEC-0019_ | Operator trace logger | _reserved_ | _unassigned_ | 02 SS 8 | Feeds C4; Parquet append-only |
+| [SPEC-0020](SPEC-0020-ndcg-at-10-metric.md) | NDCG@10 ranking metric in the eval harness | Implementing | _unassigned_ | 05 SS 14 | C2 ship-gate metric ([ADR-0007](../adr/ADR-0007-original-contributions-c1-c2-c4.md), [ADR-0008](../adr/ADR-0008-rrf-as-runtime-fallback.md)); extends SPEC-0001 harness |
 
 ## Cross-cutting prior art
 

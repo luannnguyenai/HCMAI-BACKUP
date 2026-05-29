@@ -1,4 +1,5 @@
 # Implements SPEC-0001 SS 3.3 and SS 4 (aggregation, per-task-type slicing).
+# Implements SPEC-0020 SS 3 (mean_ndcg_at_10 roll-up).
 """Aggregation utilities. Pure: no I/O, deterministic given inputs."""
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ def aggregate_by_task_type(tasks: list[TaskMetrics]) -> TaskTypeAggregate:
             mean_r_at_5=0.0,
             mean_r_at_10=0.0,
             mean_mrr=0.0,
+            mean_ndcg_at_10=0.0,
             mean_kis_score=None,
             mean_adhoc_score=None,
             wrong_submissions_per_task=0.0,
@@ -60,6 +62,7 @@ def aggregate_by_task_type(tasks: list[TaskMetrics]) -> TaskTypeAggregate:
         mean_r_at_5=mean(t.r_at_5 for t in tasks),
         mean_r_at_10=mean(t.r_at_10 for t in tasks),
         mean_mrr=mean(t.mrr for t in tasks),
+        mean_ndcg_at_10=mean(t.ndcg_at_10 for t in tasks),
         mean_kis_score=mean(kis_scores) if kis_scores else None,
         mean_adhoc_score=mean(adhoc_scores) if adhoc_scores else None,
         wrong_submissions_per_task=mean(t.wrong_submissions for t in tasks),
