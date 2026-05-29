@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# POSIX wrapper for the `embed` entry point (SPEC-0004).
+#
+# Mirrors bin/eval: on Linux/Mac use `./bin/embed ...` from a clone; on
+# Windows `uv run embed ...` works directly via the [project.scripts]
+# console script.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+exec uv run embed "$@"
