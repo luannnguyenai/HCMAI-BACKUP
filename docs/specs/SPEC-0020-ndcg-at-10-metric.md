@@ -1,7 +1,7 @@
 ---
 id: SPEC-0020
 title: NDCG@10 ranking metric in the evaluation harness
-status: Implementing
+status: Implemented
 owner: unassigned
 created: 2026-05-29
 updated: 2026-05-29
@@ -136,3 +136,4 @@ Determinism: pure function of (submissions, correct_ids, k); no I/O, no randomne
 | Date | Author | Change |
 |---|---|---|
 | 2026-05-29 | implementer (user-directed) | Created; Draft -> Approved -> Implementing in one pass for solo work per CONTRIBUTING SS "The workflow". Implementation PR opens against branch `spec/0020-ndcg-at-10-metric`. |
+| 2026-05-29 | implementer | Merged in PR #5; status -> Implemented. |
