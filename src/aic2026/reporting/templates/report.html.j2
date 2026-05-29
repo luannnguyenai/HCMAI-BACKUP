@@ -44,6 +44,7 @@
       <tr><td>mean R@5</td><td>{{ "%.3f"|format(metrics.overall.mean_r_at_5) }}</td></tr>
       <tr><td>mean R@10</td><td>{{ "%.3f"|format(metrics.overall.mean_r_at_10) }}</td></tr>
       <tr><td>mean MRR</td><td>{{ "%.3f"|format(metrics.overall.mean_mrr) }}</td></tr>
+      <tr><td>mean NDCG@10</td><td>{{ "%.3f"|format(metrics.overall.mean_ndcg_at_10) }}</td></tr>
       <tr><td>wrong submissions / task</td><td>{{ "%.2f"|format(metrics.overall.wrong_submissions_per_task) }}</td></tr>
       <tr><td>latency p50 (ms)</td><td>{{ "%.1f"|format(metrics.latency.p50_ms) }}</td></tr>
       <tr><td>latency p95 (ms)</td><td>{{ "%.1f"|format(metrics.latency.p95_ms) }}</td></tr>
@@ -62,6 +63,7 @@
         <th>R@5</th>
         <th>R@10</th>
         <th>MRR</th>
+        <th>NDCG@10</th>
         <th>KIS score</th>
         <th>Ad-hoc score</th>
       </tr>
@@ -76,6 +78,7 @@
         <td>{{ "%.3f"|format(agg.mean_r_at_5) }}</td>
         <td>{{ "%.3f"|format(agg.mean_r_at_10) }}</td>
         <td>{{ "%.3f"|format(agg.mean_mrr) }}</td>
+        <td>{{ "%.3f"|format(agg.mean_ndcg_at_10) }}</td>
         <td>{% if agg.mean_kis_score is not none %}{{ "%.1f"|format(agg.mean_kis_score) }}{% else %}-{% endif %}</td>
         <td>{% if agg.mean_adhoc_score is not none %}{{ "%.1f"|format(agg.mean_adhoc_score) }}{% else %}-{% endif %}</td>
       </tr>

@@ -1,4 +1,5 @@
 # Implements SPEC-0001 SS 4 (main run loop), AC1, AC2, AC4.
+# Implements SPEC-0020 (threads ndcg_at_10 through to TaskMetrics).
 """End-to-end evaluation runner.
 
 The runner is the orchestration layer: load tasks -> dispatch to backend ->
@@ -112,7 +113,7 @@ class EvalRunner:
 
         by_type, overall, latency = aggregate(per_task)
         return AggregateMetrics(
-            schema_version="1",
+            schema_version="2",  # SPEC-0020: ndcg_at_10 added
             system=self.config.system,
             run_id=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             git_sha=_safe_git_sha(),
@@ -147,6 +148,7 @@ class EvalRunner:
             r_at_5=float(scored["r_at_5"]),
             r_at_10=float(scored["r_at_10"]),
             mrr=float(scored["mrr"]),
+            ndcg_at_10=float(scored["ndcg_at_10"]),
             time_to_first_correct_ms=scored["time_to_first_correct_ms"],  # type: ignore[arg-type]
             kis_score=scored["kis_score"],  # type: ignore[arg-type]
             adhoc_score=scored["adhoc_score"],  # type: ignore[arg-type]

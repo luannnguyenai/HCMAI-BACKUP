@@ -1,18 +1,25 @@
 # Unit tests for the pure scoring functions in aic2026.harness.scoring.
+# NDCG tests prove SPEC-0020 AC1, AC3, AC4.
 
 from __future__ import annotations
+
+import math
+
+import pytest
 
 from aic2026.harness.scoring import (
     adhoc_recall_at_k,
     adhoc_score,
     kis_score,
     mrr,
+    ndcg_at_k,
     qa_correct,
     r_at_k,
+    score_task,
     trake_correct,
 )
 from aic2026.models.submission import Submission
-from aic2026.models.task import GroundTruth
+from aic2026.models.task import GroundTruth, MockTask, TaskType
 
 
 def _subs(*frame_ids: str) -> list[Submission]:
@@ -143,3 +150,64 @@ def test_trake_wrong_order_is_incorrect() -> None:
 def test_trake_short_list_is_incorrect() -> None:
     gt = GroundTruth(trake_frame_ids=["a", "b", "c", "d"])
     assert trake_correct(_subs("a", "b", "c"), gt) is False
+
+
+# --- NDCG@10 (SPEC-0020) ---------------------------------------------------
+
+
+def _idcg(n_relevant: int) -> float:
+    return sum(1.0 / math.log2(i + 1) for i in range(1, n_relevant + 1))
+
+
+def test_ndcg_perfect_ranking_is_one_AC1() -> None:
+    # All relevant items first -> DCG == IDCG -> NDCG == 1.
+    relevant = {"a", "b"}
+    assert ndcg_at_k(_subs("a", "b", "c"), relevant, 10) == pytest.approx(1.0)
+
+
+def test_ndcg_single_relevant_rank_discount_AC1() -> None:
+    # Single relevant: NDCG == 1 / log2(rank + 1) since IDCG == 1.
+    assert ndcg_at_k(_subs("a", "b"), {"a"}, 10) == pytest.approx(1.0)
+    # Correct item at rank 3 -> 1 / log2(4) == 0.5.
+    assert ndcg_at_k(_subs("x", "y", "a", "z"), {"a"}, 10) == pytest.approx(0.5)
+
+
+def test_ndcg_partial_multi_relevant_AC1() -> None:
+    # relevant {a,b,c,d}; retrieved a (r1) and c (r3) in top-10.
+    relevant = {"a", "b", "c", "d"}
+    subs = _subs("a", "x", "c", "y", "z")
+    expected = (1.0 / math.log2(2) + 1.0 / math.log2(4)) / _idcg(4)
+    assert ndcg_at_k(subs, relevant, 10) == pytest.approx(expected)
+
+
+def test_ndcg_empty_relevant_is_zero_AC3() -> None:
+    assert ndcg_at_k(_subs("a", "b"), set(), 10) == 0.0
+
+
+def test_ndcg_ignores_items_beyond_k_AC3() -> None:
+    # The only relevant item sits at rank 11; NDCG@10 must not see it.
+    subs = _subs(*[f"f{i}" for i in range(10)], "a")  # "a" is at rank 11
+    assert ndcg_at_k(subs, {"a"}, 10) == 0.0
+
+
+def test_ndcg_invalid_k_raises_AC3() -> None:
+    with pytest.raises(ValueError):
+        ndcg_at_k(_subs("a"), {"a"}, 0)
+
+
+def _qa_task() -> MockTask:
+    return MockTask(
+        task_id="QA-0001",
+        task_type=TaskType.QA,
+        query_vi="co bao nhieu chiec xe?",
+        time_limit_seconds=180,
+        ground_truth=GroundTruth(qa_answer="ba", qa_answer_acceptable=["3"]),
+    )
+
+
+def test_score_task_qa_ndcg_collapses_to_correctness_AC4() -> None:
+    task = _qa_task()
+    correct = score_task(task, [Submission(rank=1, score=1.0, text="ba chiec")], 1000.0)
+    assert correct["ndcg_at_10"] == 1.0
+    wrong = score_task(task, [Submission(rank=1, score=1.0, text="hai")], 1000.0)
+    assert wrong["ndcg_at_10"] == 0.0
