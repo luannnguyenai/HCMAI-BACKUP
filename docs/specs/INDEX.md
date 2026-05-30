@@ -25,7 +25,7 @@
 | _SPEC-0011_ | DANTE DP for TRAKE | _reserved_ | _unassigned_ | 01 SS 5.10 | 4-scene temporal alignment |
 | _SPEC-0012_ | React operator console | _reserved_ | _unassigned_ | 06 | UI shell + grid + scrubber |
 | _SPEC-0013_ | Submission verification panel | _reserved_ | _unassigned_ | 06 SS 3.7 | Anti-foot-gun UI component |
-| _SPEC-0014_ | C1 ? DiacriticBERT training | _reserved_ | _unassigned_ | 08 SS 3 | Diacritic-noise schedule + InfoNCE. Failure mode it attacks is documented in baseline (research-note 05 SS 4.1) |
+| [SPEC-0014](SPEC-0014-diacritic-bert.md) | C1 ? DiacriticBERT training | Draft | _unassigned_ | 08 SS 3 | Diacritic-noise schedule + InfoNCE; **trainable now on public Vi caption+ASR text** (no June-25 dep). Failure mode in baseline (research-note 05 SS 4.1) |
 | _SPEC-0015_ | C2 ? Per-task-type learned fusion | _reserved_ | _unassigned_ | 08 SS 4 | LightGBM LambdaRank + RRF fallback |
 | _SPEC-0016_ | C4 ? Agent self-distillation | _reserved_ | _unassigned_ | 08 SS 6 | DSPy MIPRO over operator traces |
 | _SPEC-0017_ | LangGraph automatic-track agent | _reserved_ | _unassigned_ | 02 | State machine + retry loop |
