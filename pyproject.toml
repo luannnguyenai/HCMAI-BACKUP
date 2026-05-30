@@ -32,12 +32,26 @@ embedding = [
     "huggingface-hub>=0.24",
     "pillow>=10",
 ]
+# SPEC-0014: C1 DiacriticBERT training. torch + transformers (frozen BGE-M3),
+# datasets (public Vietnamese corpora), pyarrow (the contrastive Parquet). Not
+# installed in CI; the noise/corpus/eval logic is CPU-tested via the
+# clean_strings override + DummyEmbedder, and training via an injected stub
+# backbone (no model download). Install on the GPU box: `uv sync --extra train`.
+train = [
+    "torch>=2.4",
+    "transformers>=4.45",
+    "sentencepiece>=0.2",
+    "datasets>=2.19",
+    "pyarrow>=16",
+    "huggingface-hub>=0.24",
+]
 
 [project.scripts]
 eval = "aic2026.cli.eval:main"
 embed = "aic2026.cli.embed:main"
 remote = "aic2026.cli.remote:main"
 remote-job-exec = "aic2026.cli.remote_job_exec:main"
+train = "aic2026.cli.train:main"
 
 [dependency-groups]
 dev = [
@@ -48,6 +62,9 @@ dev = [
     # ThreadedMotoServer, which is how R2 / manifest tests get a real local
     # S3-compatible HTTP endpoint. See `tests/unit/test_remote_r2_AC3.py`.
     "moto[server]>=5",
+    # pyarrow: the C1 corpus builder (SPEC-0014) writes the contrastive Parquet;
+    # tests exercise it via the clean_strings override (CPU, no network).
+    "pyarrow>=16",
 ]
 
 [build-system]

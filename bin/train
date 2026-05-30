@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# POSIX wrapper for the `train` entry point (SPEC-0014).
+#
+# Mirrors bin/embed: on Linux/Mac use `./bin/train ...` from a clone; on
+# Windows `uv run train ...` works directly via the [project.scripts] console
+# script. Corpus + training need the train extra: `uv sync --extra train`.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+exec uv run train "$@"
