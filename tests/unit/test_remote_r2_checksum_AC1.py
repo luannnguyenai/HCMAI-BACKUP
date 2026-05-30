@@ -56,3 +56,15 @@ def test_list_works_against_moto_AC1(r2) -> None:
     r2.put_bytes("weights/foo/a.txt", b"hi")
     r2.put_bytes("weights/foo/b.txt", b"yo")
     assert r2.list("weights") == ["weights/foo/a.txt", "weights/foo/b.txt"]
+
+
+def test_provision_restore_uses_lowercase_checksum_values_AC1() -> None:
+    # botocore matches these values case-sensitively; uppercase WHEN_REQUIRED is
+    # silently ignored, leaving the R2-incompatible default on. The provision
+    # `aws s3 sync` restore commands must emit lowercase `when_required`.
+    from aic2026.cli.remote import _uv_cache_restore_cmd
+
+    cmd = _uv_cache_restore_cmd("some-bucket")
+    assert "AWS_REQUEST_CHECKSUM_CALCULATION=when_required" in cmd
+    assert "AWS_RESPONSE_CHECKSUM_VALIDATION=when_required" in cmd
+    assert "WHEN_REQUIRED" not in cmd

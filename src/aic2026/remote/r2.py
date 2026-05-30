@@ -17,10 +17,40 @@ network or env-validation surprises.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_REGION: str = "auto"
+
+
+def _normalize_endpoint(url: str) -> str:
+    """Return the R2 account host with any path component stripped.
+
+    The R2 S3 endpoint must be the bare account host
+    (``https://<account-id>.r2.cloudflarestorage.com``). The Cloudflare dashboard
+    shows the URL with the bucket appended; pasting it verbatim yields
+    ``https://<acct>.r2.cloudflarestorage.com/<bucket>``. boto3 then targets the
+    bucket a second time, so ``list_objects_v2`` hits
+    ``/<bucket>/<bucket>?list-type=2`` and R2 answers ``NoSuchKey`` - while
+    PutObject/GetObject of explicit keys still succeed, which masks the bug.
+    This was the real cause of the H200-lease ``list`` failure first
+    misattributed to botocore checksums (the moto tests could not reproduce it,
+    because a mock ignores the endpoint path). Strip the path so a pasted
+    dashboard URL works.
+    """
+    parts = urlsplit(url)
+    if parts.path.strip("/"):
+        logger.warning(
+            "R2_ENDPOINT_URL had a path component (%r); stripping it - the R2 "
+            "endpoint must be the account host only, with no bucket name.",
+            parts.path,
+        )
+        return urlunsplit((parts.scheme, parts.netloc, "", "", ""))
+    return url
 
 
 def _required_env(name: str) -> str:
@@ -54,7 +84,9 @@ class R2Client:
         from botocore.config import Config
 
         self.bucket: str = bucket or _required_env("R2_BUCKET")
-        self.endpoint_url: str = endpoint_url or _required_env("R2_ENDPOINT_URL")
+        self.endpoint_url: str = _normalize_endpoint(
+            endpoint_url or _required_env("R2_ENDPOINT_URL")
+        )
         access = access_key_id or _required_env("R2_ACCESS_KEY_ID")
         secret = secret_access_key or _required_env("R2_SECRET_ACCESS_KEY")
         region = region or os.environ.get("R2_REGION", DEFAULT_REGION)

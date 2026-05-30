@@ -158,8 +158,8 @@ def _uv_cache_restore_cmd(bucket: str) -> str:
     return (
         f"{_REMOTE_PATH_PREFIX} && "
         "AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY "
-        "AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED "
-        "AWS_RESPONSE_CHECKSUM_VALIDATION=WHEN_REQUIRED "
+        "AWS_REQUEST_CHECKSUM_CALCULATION=when_required "
+        "AWS_RESPONSE_CHECKSUM_VALIDATION=when_required "
         f'uvx --from awscli aws s3 sync "s3://{bucket}/env-cache/uv-$(uname -m)/" '
         '"$(uv cache dir)" --endpoint-url "$R2_ENDPOINT_URL" --only-show-errors '
         '|| echo "(no uv cache in R2 yet; uv sync will download wheels)"'
@@ -211,7 +211,7 @@ def provision(
     weights_cmd = (
         f"{_REMOTE_PATH_PREFIX} && "
         "AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY "
-        "AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED AWS_RESPONSE_CHECKSUM_VALIDATION=WHEN_REQUIRED "
+        "AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required "
         f'uvx --from awscli aws s3 sync "s3://{bucket}/weights/" "{base}/weights/" '
         '--endpoint-url "$R2_ENDPOINT_URL" --only-show-errors'
     )

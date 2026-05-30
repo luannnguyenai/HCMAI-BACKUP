@@ -33,7 +33,8 @@ This spec packages provisioning so the next lease is `provision` -> ready in min
 
 ### 2.1 In scope
 
-- **`R2Client` checksum-compat fix** for real Cloudflare R2: construct the boto3 client with `request_checksum_calculation="when_required"` + `response_checksum_validation="when_required"`. Without this, `list_objects_v2` 404s with `NoSuchKey` on botocore >= 1.36 (Cloudflare-documented). This unblocks `bin/remote list`/`pull` and the restore path.
+- **`R2Client` checksum-compat Config** for real Cloudflare R2: construct the boto3 client with `request_checksum_calculation="when_required"` + `response_checksum_validation="when_required"`, keeping botocore >= 1.36 upload / `s3 sync` behaviour R2-compatible (Cloudflare-documented). **NB**: this does *not* fix the `list_objects_v2` `NoSuchKey` we first saw - that was an endpoint bug (next bullet). The checksum claim was the initial misdiagnosis; the Config is kept because it is still correct for uploads.
+- **`R2Client` endpoint-normalisation guard** (the *real* `list` fix): strip any path/bucket component from `R2_ENDPOINT_URL`. A pasted R2-dashboard URL (`https://<acct>.r2.cloudflarestorage.com/<bucket>`) makes boto3 target the bucket twice, so `list_objects_v2` hits `/<bucket>/<bucket>?list-type=2` -> `NoSuchKey`, while explicit-key PutObject/GetObject still succeed (which masks it). moto cannot reproduce it (a mock ignores the endpoint path), so CI stayed green. Also lowercase the `aws s3 sync` checksum env vars in `provision` (uppercase `WHEN_REQUIRED` is silently ignored by botocore, so the restore had no protection at all).
 - **`cache-env` job**: mirror the uv wheel cache (`~/.cache/uv`) to R2 under `env-cache/uv-<arch>/` (arch-tagged: `x86_64` vs `aarch64` never clash).
 - **Hardened `provision`** - one idempotent command:
   - push code from the laptop via **scoped** `git archive` (private-repo safe, no 208 MB of papers)
@@ -88,11 +89,12 @@ remote-job-exec <job> [--run-id <id>] <out_dir> [--config k=v ...]
 
 ## 5. Acceptance criteria
 
-- **AC1**: `R2Client` is constructed with the checksum-compat `Config`; `R2Client.list(prefix)` returns keys against a moto backend (regression guard) and is documented as the real-R2 `NoSuchKey` fix. Verified in `tests/unit/test_remote_r2_checksum_AC1.py`.
+- **AC1**: `R2Client` is constructed with the checksum-compat `Config` (`when_required` request + response), keeping botocore >= 1.36 upload/sync behaviour R2-compatible; `R2Client.list(prefix)` returns keys against a moto backend (regression guard); and the `provision` restore command emits lowercase `when_required`. Verified in `tests/unit/test_remote_r2_checksum_AC1.py`. (The real-R2 `list` `NoSuchKey` fix is the endpoint guard - **AC6**, not the checksum Config.)
 - **AC2**: `cache-env` mirrors a fake uv-cache dir to `env-cache/uv-<arch>/` on R2 with a `.cache-meta.json`; arch-tagged prefix. Verified in `tests/unit/test_remote_cache_env_AC2.py` (moto + injected cache dir).
 - **AC3**: `remote-job-exec` with no `--run-id` generates a `RunContext`-valid run_id; with `--run-id` it uses the passed value. Verified in `tests/unit/test_remote_job_exec_runid_AC3.py`.
 - **AC4**: `bin/remote provision --dry-run` exits 0, prints the planned push/restore/sync steps, and performs no ssh/R2/scp side effects. Verified in `tests/unit/test_remote_provision_dry_run_AC4.py`.
 - **AC5** (manual; pasted into PR): on a fresh lease, `bin/remote provision --sha <sha>` brings the box to ready (uv cache restored, `uv sync` a cache hit) in < 5 min, and `bin/remote list` works against real R2.
+- **AC6**: `R2Client` strips a bucket/path component from `R2_ENDPOINT_URL` (e.g. a pasted dashboard URL ending in `/<bucket>`), which is the real cause of `list_objects_v2` `NoSuchKey` against Cloudflare R2. Verified in `tests/unit/test_remote_r2_endpoint_AC6.py`.
 
 ## 6. Non-functional requirements
 
@@ -120,3 +122,4 @@ remote-job-exec <job> [--run-id <id>] <out_dir> [--config k=v ...]
 | Date | Author | Change |
 |---|---|---|
 | 2026-05-30 | implementer (user-directed) | Created; Draft -> Approved -> Implementing in one pass per CONTRIBUTING. Packages provisioning into one command + R2 warm-cache restore; fixes the `R2Client.list()` R2-checksum bug + the run_id format trap surfaced on the H200 lease. |
+| 2026-05-30 | implementer | Lease follow-up + root-cause correction: the `list` `NoSuchKey` was an **endpoint** bug (bucket name appended to `R2_ENDPOINT_URL`), not checksums. Added an endpoint-normalisation guard in `R2Client` (AC6) + corrected AC1; lowercased the `provision` `aws s3 sync` checksum env vars (`WHEN_REQUIRED` -> `when_required`, silently ignored before); sharpened `.env.remote.example`. moto masked the bug because a mock ignores the endpoint path. |
