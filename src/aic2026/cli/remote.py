@@ -28,7 +28,7 @@ from aic2026.remote.launchers import (
 from aic2026.remote.manifest import ManifestEntry, append_to_r2, read_all
 from aic2026.remote.r2 import R2Client
 from aic2026.remote.registry import resolve
-from aic2026.remote.ssh import SSHError, resolve_host, ssh_exec
+from aic2026.remote.ssh import SSHError, push_git_archive, resolve_host, ssh_exec
 
 app = typer.Typer(
     add_completion=False,
@@ -53,6 +53,25 @@ ALLOWED_REMOTE_ENV_KEYS: tuple[str, ...] = (
     "R2_BUCKET",
     "R2_REGION",
 )
+
+# Committed paths shipped to the box (SPEC-0024): code + lock + scripts, NOT
+# the 208 MB of docs/papers PDFs. Keep in sync with what `uv sync` needs.
+CODE_PATHS: tuple[str, ...] = (
+    "src",
+    "bin",
+    "tests",
+    "infra",
+    "pyproject.toml",
+    "uv.lock",
+    "ruff.toml",
+    ".python-version",
+    "README.md",
+)
+
+# PATH prefix every remote command needs (uv installs to ~/.local/bin, which
+# non-interactive sshd shells don't pick up). Surfaced as a constant so the
+# dry-run plan and the executed command stay identical.
+_REMOTE_PATH_PREFIX = 'export PATH="$HOME/.local/bin:$PATH"'
 
 
 def _logger() -> logging.Logger:
@@ -128,62 +147,98 @@ def setup() -> None:
 # --- provision -------------------------------------------------------------
 
 
+def _uv_cache_restore_cmd(bucket: str) -> str:
+    """Remote command to restore the uv wheel cache from R2 (SPEC-0024).
+
+    Uses `uvx --from awscli aws s3 sync` (no awscli install needed, just uv).
+    Maps R2_* -> AWS_* and sets the checksum-compat env vars (same R2 issue as
+    R2Client). Arch is resolved on the box via `$(uname -m)`. Falls back to a
+    no-op when the cache prefix is absent (first lease).
+    """
+    return (
+        f"{_REMOTE_PATH_PREFIX} && "
+        "AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY "
+        "AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED "
+        "AWS_RESPONSE_CHECKSUM_VALIDATION=WHEN_REQUIRED "
+        f'uvx --from awscli aws s3 sync "s3://{bucket}/env-cache/uv-$(uname -m)/" '
+        '"$(uv cache dir)" --endpoint-url "$R2_ENDPOINT_URL" --only-show-errors '
+        '|| echo "(no uv cache in R2 yet; uv sync will download wheels)"'
+    )
+
+
+def _uv_sync_cmd(dest: str) -> str:
+    return f"{_REMOTE_PATH_PREFIX} && cd {dest} && uv sync --frozen --extra embedding"
+
+
 @app.command()
 def provision(
     sha: Annotated[
         str,
         typer.Option("--sha", help="Git SHA (or branch/tag) to provision on the cluster."),
     ],
-    repo: Annotated[
-        str | None,
-        typer.Option(
-            "--repo",
-            help="Git URL to clone. Default: `AIC2026_REMOTE_REPO_URL` env var.",
-        ),
-    ] = None,
-    prewarm: Annotated[
+    restore_env: Annotated[
         bool,
         typer.Option(
-            "--prewarm/--no-prewarm", help="Pre-download SigLIP-2 weights into the HF cache."
+            "--restore-env/--no-restore-env",
+            help="Restore the uv wheel cache from R2 before uv sync (fast path).",
         ),
+    ] = True,
+    restore_weights: Annotated[
+        bool,
+        typer.Option("--restore-weights", help="Also pull weights/<repo>/ from R2."),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Print the plan and exit 0; no side effects."),
     ] = False,
 ) -> None:
-    """Provision a fresh lease: clone repo at SHA, `uv sync --frozen --extra embedding`."""
+    """Provision a fresh lease in one command: push code, restore uv cache from
+    R2, `uv sync` (cache hit), optionally restore weights. Idempotent.
+    """
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     log = _logger()
-    repo_url = repo or os.environ.get("AIC2026_REMOTE_REPO_URL")
-    if not repo_url:
-        typer.secho(
-            "ERROR: --repo not given and AIC2026_REMOTE_REPO_URL not in env.",
-            err=True,
-            fg=typer.colors.RED,
-        )
-        raise typer.Exit(EXIT_CONFIG)
 
     host = resolve_host()
     base = os.environ.get("AIC2026_REMOTE_BASE", "~/aic2026")
     short = sha[:7]
     dest = f"{base}/{short}"
+    bucket = os.environ.get("R2_BUCKET", "<R2_BUCKET>")
+    env = _whitelisted_remote_env()
 
-    log.info("clone %s @ %s into %s:%s", repo_url, short, host, dest)
-    clone_cmd = (
-        f"mkdir -p {base} && "
-        f"(test -d {dest} || git clone {repo_url} {dest}) && "
-        f"cd {dest} && git fetch --depth 50 origin && git checkout {sha}"
+    push_label = f"git archive {short} -- {' '.join(CODE_PATHS)} | ssh {host} 'tar -x -C {dest}'"
+    restore_cmd = _uv_cache_restore_cmd(bucket)
+    sync_cmd = _uv_sync_cmd(dest)
+    weights_cmd = (
+        f"{_REMOTE_PATH_PREFIX} && "
+        "AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY "
+        "AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED AWS_RESPONSE_CHECKSUM_VALIDATION=WHEN_REQUIRED "
+        f'uvx --from awscli aws s3 sync "s3://{bucket}/weights/" "{base}/weights/" '
+        '--endpoint-url "$R2_ENDPOINT_URL" --only-show-errors'
     )
+
+    if dry_run:
+        typer.echo("DRY-RUN provision plan (no side effects):")
+        typer.echo(f"  host   = {host}")
+        typer.echo(f"  dest   = {dest}")
+        typer.echo(f"  1. push: {push_label}")
+        if restore_env:
+            typer.echo(f"  2. restore uv cache: {restore_cmd}")
+        typer.echo(f"  3. uv sync: {sync_cmd}")
+        if restore_weights:
+            typer.echo(f"  4. restore weights: {weights_cmd}")
+        raise typer.Exit(EXIT_OK)
+
     try:
-        ssh_exec(host, clone_cmd, timeout=120.0)
+        log.info("pushing code to %s:%s (scoped git archive)", host, dest)
+        push_git_archive(host, sha, list(CODE_PATHS), dest, timeout=120.0)
+        if restore_env:
+            log.info("restoring uv cache from R2 (if present)")
+            ssh_exec(host, restore_cmd, env=env, timeout=1800.0)
         log.info("uv sync --frozen --extra embedding")
-        ssh_exec(host, f"cd {dest} && uv sync --frozen --extra embedding", timeout=600.0)
-        if prewarm:
-            log.info("HF cache pre-warm (SigLIP-2)")
-            ssh_exec(
-                host,
-                f"cd {dest} && uv run python -c "
-                f"\"from aic2026.embedding.siglip2 import SigLip2Embedder; SigLip2Embedder(device='cpu', dtype='float32')\"",
-                env=_whitelisted_remote_env(),
-                timeout=1800.0,
-            )
+        ssh_exec(host, sync_cmd, timeout=1800.0)
+        if restore_weights:
+            log.info("restoring weights from R2")
+            ssh_exec(host, weights_cmd, env=env, timeout=7200.0)
     except SSHError as exc:
         typer.secho(f"ERROR: {exc}", err=True, fg=typer.colors.RED)
         raise typer.Exit(EXIT_REMOTE) from None
@@ -224,14 +279,21 @@ def _format_dry_run_plan(
 
 
 def _build_remote_cmd(ctx: RunContext, config: dict[str, str]) -> str:
-    """The command the launcher runs on the remote."""
+    """The command the launcher runs on the remote.
+
+    PATH is prepended so uv is found on the non-interactive ssh shell
+    (uv installs to ~/.local/bin, which sshd shells don't pick up).
+    Uses the SPEC-0024 `--run-id`/`--out` flags on remote-job-exec.
+    """
     base = os.environ.get("AIC2026_REMOTE_BASE", "~/aic2026")
     repo_dir = f"{base}/{ctx.git_sha[:7]}"
     config_args = " ".join(f"--config {k}={v}" for k, v in config.items())
     return (
+        'export PATH="$HOME/.local/bin:$PATH" && '
         f"cd {repo_dir} && "
         f"mkdir -p {ctx.remote_run_dir} && "
-        f"uv run remote-job-exec {ctx.job_name} {ctx.run_id} {ctx.remote_run_dir} {config_args}"
+        f"uv run remote-job-exec {ctx.job_name} "
+        f"--run-id {ctx.run_id} --out {ctx.remote_run_dir} {config_args}"
     )
 
 

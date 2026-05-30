@@ -51,6 +51,7 @@ class R2Client:
         region: str | None = None,
     ) -> None:
         import boto3
+        from botocore.config import Config
 
         self.bucket: str = bucket or _required_env("R2_BUCKET")
         self.endpoint_url: str = endpoint_url or _required_env("R2_ENDPOINT_URL")
@@ -58,12 +59,23 @@ class R2Client:
         secret = secret_access_key or _required_env("R2_SECRET_ACCESS_KEY")
         region = region or os.environ.get("R2_REGION", DEFAULT_REGION)
 
+        # SPEC-0024 AC1: botocore >= 1.36 turns on default request/response
+        # checksums that Cloudflare R2 does not fully support. The visible
+        # symptom is `list_objects_v2` returning `NoSuchKey` against real R2
+        # (uploads happen to survive because s3transfer self-corrects). Set
+        # both knobs to "when_required" - Cloudflare's documented R2 fix.
+        # https://developers.cloudflare.com/r2/examples/aws/boto3/
+        r2_config = Config(
+            request_checksum_calculation="when_required",
+            response_checksum_validation="when_required",
+        )
         self._s3 = boto3.client(
             "s3",
             endpoint_url=self.endpoint_url,
             aws_access_key_id=access,
             aws_secret_access_key=secret,
             region_name=region,
+            config=r2_config,
         )
 
     # --- single objects ----------------------------------------------------

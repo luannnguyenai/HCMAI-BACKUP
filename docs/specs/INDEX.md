@@ -33,7 +33,8 @@
 | _SPEC-0019_ | Operator trace logger | _reserved_ | _unassigned_ | 02 SS 8 | Feeds C4; Parquet append-only |
 | [SPEC-0020](SPEC-0020-ndcg-at-10-metric.md) | NDCG@10 ranking metric in the eval harness | Implemented | _unassigned_ | 05 SS 14 | C2 ship-gate metric ([ADR-0007](../adr/ADR-0007-original-contributions-c1-c2-c4.md), [ADR-0008](../adr/ADR-0008-rrf-as-runtime-fallback.md)); extends SPEC-0001 harness. Merged in PR #5 |
 | [SPEC-0021](SPEC-0021-ci-pipeline.md) | CI pipeline (lint + test + smoke-eval gate) | Implemented | _unassigned_ | 05 SS 6 | GitHub Actions; enforces per-PR smoke ([ADR-0009](../adr/ADR-0009-sdd-workflow.md)). Score-threshold gating deferred to SPEC-0001 AC7. Merged in PR #6 |
-| [SPEC-0022](SPEC-0022-remote-gpu-runner.md) | Remote GPU job runner + Cloudflare R2 artifact sync | Implementing | _unassigned_ | 05 SS 5 | `bin/remote` CLI. R2 ([ADR-0011](../adr/ADR-0011-r2-artifact-store-and-lease-rollover.md)) for cross-lease persistence. First job: `extract-siglip` wraps SPEC-0004 |
+| [SPEC-0022](SPEC-0022-remote-gpu-runner.md) | Remote GPU job runner + Cloudflare R2 artifact sync | Implementing | _unassigned_ | 05 SS 5 | `bin/remote` CLI. R2 ([ADR-0011](../adr/ADR-0011-r2-artifact-store-and-lease-rollover.md)) for cross-lease persistence. First job: `extract-siglip` wraps SPEC-0004. cache-weights added in spec/0023 |
+| [SPEC-0024](SPEC-0024-provision-packaging.md) | One-command provisioning + R2 warm-cache restore | Implementing | _unassigned_ | 05 SS 5 | Hardens SPEC-0022 `provision`; `cache-env` job; fixes `R2Client.list()` R2-checksum bug + run_id trap from the H200 lease |
 
 ## Cross-cutting prior art
 
