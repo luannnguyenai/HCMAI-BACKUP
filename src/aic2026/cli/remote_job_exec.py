@@ -23,7 +23,7 @@ from typing import Annotated
 
 import typer
 
-from aic2026.remote.context import RunContext
+from aic2026.remote.context import RunContext, make_run_id
 from aic2026.remote.registry import resolve
 
 app = typer.Typer(
@@ -64,11 +64,18 @@ def _git_sha_here() -> str:
 @app.command()
 def exec_cmd(
     job_name: Annotated[str, typer.Argument(help="Registered job name.")],
-    run_id: Annotated[str, typer.Argument(help="Authoritative run_id from `bin/remote run`.")],
-    remote_run_dir: Annotated[
-        Path,
-        typer.Argument(help="Local-on-cluster directory to write outputs into."),
-    ],
+    run_id: Annotated[
+        str | None,
+        typer.Option(
+            "--run-id",
+            help="Run id (SPEC-0022 format). Auto-generated when omitted, so "
+            "manual invocations can't hit the RunContext format trap.",
+        ),
+    ] = None,
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Output dir. Default: runs/<run_id> under cwd."),
+    ] = None,
     config: Annotated[
         list[str] | None,
         typer.Option("--config", help="Free-form key=value pairs forwarded to the job."),
@@ -88,13 +95,19 @@ def exec_cmd(
         typer.secho(f"ERROR: {exc}", err=True, fg=typer.colors.RED)
         raise typer.Exit(2) from None
 
+    git_sha = _git_sha_here()
+    # SPEC-0024 AC3: generate a valid run_id when one wasn't passed.
+    if run_id is None:
+        run_id = make_run_id(git_sha, job_name)
+    out_dir = out or (Path("runs") / run_id)
+
     ctx = RunContext(
         run_id=run_id,
-        git_sha=_git_sha_here(),
+        git_sha=git_sha,
         job_name=job_name,
         started_at=datetime.now(UTC),
-        local_run_dir=remote_run_dir,
-        remote_run_dir=PurePosixPath(str(remote_run_dir)),
+        local_run_dir=out_dir,
+        remote_run_dir=PurePosixPath(str(out_dir)),
         r2_prefix=f"runs/{run_id}",
     )
     cfg = _parse_config(config)

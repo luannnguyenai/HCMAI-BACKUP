@@ -124,3 +124,49 @@ def scp_pull(
             returncode=proc.returncode,
             stderr=proc.stderr,
         )
+
+
+def push_git_archive(
+    host: str,
+    ref: str,
+    paths: list[str],
+    dest: str,
+    *,
+    timeout: float | None = None,
+) -> None:
+    """`git archive <ref> -- <paths> | ssh host 'mkdir -p dest && tar -xf - -C dest'`.
+
+    Ships a clean snapshot of committed files from the LOCAL clone to the box -
+    private-repo safe (no GitHub creds on the lease) and scoped (no large
+    untracked/ignored files). Raises SSHError on failure of either end.
+    """
+    archive = subprocess.Popen(
+        ["git", "archive", ref, "--", *paths],
+        stdout=subprocess.PIPE,
+    )
+    try:
+        remote = subprocess.run(
+            ["ssh", host, f"mkdir -p {dest} && tar -xf - -C {dest}"],
+            stdin=archive.stdout,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    finally:
+        if archive.stdout is not None:
+            archive.stdout.close()
+        archive_rc = archive.wait()
+    if archive_rc != 0:
+        raise SSHError(
+            f"git archive {ref} failed (exit {archive_rc})",
+            returncode=archive_rc,
+            stderr="",
+        )
+    if remote.returncode != 0:
+        raise SSHError(
+            f"remote untar on {host}:{dest} failed (exit {remote.returncode}); "
+            f"stderr: {remote.stderr.strip()}",
+            returncode=remote.returncode,
+            stderr=remote.stderr,
+        )

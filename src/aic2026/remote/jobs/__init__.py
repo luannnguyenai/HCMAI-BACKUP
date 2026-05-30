@@ -7,6 +7,7 @@ via `aic2026.remote.registry.resolve(name)`.
 """
 
 from aic2026.remote.jobs import (
+    cache_env,  # noqa: F401  (import for side effect)
     cache_weights,  # noqa: F401  (import for side effect)
     extract_siglip,  # noqa: F401  (import for side effect)
 )

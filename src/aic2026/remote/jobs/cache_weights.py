@@ -34,16 +34,18 @@ from aic2026.remote.registry import register
 logger = logging.getLogger(__name__)
 
 # Floor models worth pre-staging. Override per-run with `--config repos=...`.
-# NOTE: SigLIP-2 / Meta CLIP 2 are pulled by open_clip from timm-hosted repos;
-# the timm id below is a best guess - verify against `dl.log` and override via
-# config if it FAILs. The other five are confirmed ids.
+# All ids below were confirmed end-to-end on the 8x H200 lease (2026-05-30).
+# `gated:` repos require accepting the model's terms on huggingface.co with the
+# account that owns HF_TOKEN BEFORE the run, or they 403 (per-repo fault-
+# tolerant, so a 403 doesn't abort the batch - just re-run that one after).
 DEFAULT_FLOOR_REPOS: tuple[str, ...] = (
     "BAAI/bge-m3",
     "vinai/PhoWhisper-large",
     "5CD-AI/Vintern-3B-beta",
-    "OpenGVLab/InternVideo2-Stage2_1B-224p-f4",
+    "OpenGVLab/InternVideo2-Stage2_1B-224p-f4",  # gated: pre-accept HF terms
     "Qwen/Qwen2.5-VL-72B-Instruct",
-    "timm/ViT-SO400M-16-SigLIP2-384",  # open_clip SigLIP-2 source (verify)
+    "timm/ViT-SO400M-16-SigLIP2-384",  # SigLIP-2 So400m (open_clip source); 1152-d
+    "facebook/metaclip-2-worldwide-huge-quickgelu",  # Meta CLIP 2 ViT-H/14 worldwide
 )
 
 WEIGHTS_PREFIX: str = "weights"
