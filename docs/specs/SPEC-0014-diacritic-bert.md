@@ -1,7 +1,7 @@
 ---
 id: SPEC-0014
 title: C1 - DiacriticBERT diacritic-robust retrieval head (noise, corpus, training, eval)
-status: Draft
+status: Implementing
 owner: unassigned
 created: 2026-05-30
 updated: 2026-05-30
@@ -191,7 +191,7 @@ bin/train c1-eval   --checkpoint runs/c1 --queries eval/diacritic_dev.txt [--k 1
 - **AC2**: `build_corpus(clean_strings=<fixture>, k=4)` writes a Parquet with the documented columns, exactly 4 positives per clean anchor, deduped, and populates `sources_used` / `sources_skipped`; a source whose loader raises is skipped while the result is still written. CPU-only, **no network** (uses the `clean_strings` override). Verified in `tests/unit/test_diacritic_corpus_AC2.py`.
 - **AC3**: `train_diacritic_head` on a tiny fixture Parquet for a few steps (a) keeps the backbone frozen (no backbone grad), (b) reduces the loss (`final_loss < initial_loss`), and (c) writes a checkpoint + `train_meta.json` whose `in_dim` was read from the model. Uses `pytest.importorskip("torch")`; **skipped in CI**. Verified in `tests/unit/test_diacritic_bert_AC3.py`.
 - **AC4**: `degradation_at_k` with `DummyEmbedder` returns overall + per-mode values in `[0, 1]`, deterministic per seed, and returns `1.0` when noise is a no-op (identical text, large `k`). Verified in `tests/unit/test_diacritic_robustness_AC4.py`.
-- **AC5**: the `train-c1` job is registered and `bin/remote run train-c1 --dry-run` plans corpus -> fit -> eval and the artefact upload without executing; a real run against mocked R2 appends a manifest entry. Verified in `tests/unit/test_remote_train_c1_AC5.py` (moto).
+- **AC5**: the `train-c1` job is registered/resolvable and the registry import path stays free of heavy deps (torch/transformers/datasets imported *inside* the job, so CI can import the jobs package without the `train` extra). Dry-run planning + the R2 artefact upload of `ctx.local_run_dir` are exercised by the generic runner tests (SPEC-0022/0024). Verified in `tests/unit/test_remote_train_c1_AC5.py`.
 - **AC6**: this spec and the module docstrings document (a) the public-corpus-now vs index-text-later split, (b) the deferred LoRA + real-task-slice + fusion-weight wiring, and (c) the read-`in_dim`-from-model rule. Verified by inspection (no test).
 
 ## 6. Non-functional requirements
@@ -214,15 +214,15 @@ bin/train c1-eval   --checkpoint runs/c1 --queries eval/diacritic_dev.txt [--k 1
   - `test_diacritic_corpus_AC2.py` - fixture `clean_strings`, column schema, 4-per-anchor, dedup, skip-on-source-failure.
   - `test_diacritic_bert_AC3.py` - `importorskip("torch")`; frozen backbone, loss decreases, meta written (skipped in CI).
   - `test_diacritic_robustness_AC4.py` - `DummyEmbedder`, value ranges, determinism, no-op == 1.0.
-  - `test_remote_train_c1_AC5.py` - job registered; dry-run plan; mocked-R2 manifest append (moto).
-- **GPU smoke on the box** (records evidence for AC3/AC4 on real BGE-M3):
+  - `test_remote_train_c1_AC5.py` - job registered/resolvable; registry import path free of heavy deps.
+- **GPU smoke on the box** (records evidence for AC3 on real BGE-M3):
   - `./bin/train c1-corpus --max-per-source 2000 --out /tmp/pairs.parquet`
   - `./bin/train c1-fit --pairs /tmp/pairs.parquet --out-dir /tmp/c1 --max-steps 2000`
-  - `./bin/train c1-eval --checkpoint /tmp/c1 --queries eval/diacritic_dev.txt` -> degradation@10 with the head vs a BGE-M3-only baseline.
+  - `./bin/train c1-eval --queries /tmp/dev.txt` -> degradation@k sweep (single-vector baseline; head-as-encoder MaxSim eval is a follow-up).
 
 ## 9. Open questions
 
-- **Q1 (blocks implementation)**: BGE-M3 head input width. proposal 08 part 3.2 step 3 writes the head as `768 -> 384 -> 384`, but BGE-M3 (XLM-RoBERTa-large) has hidden size **1024** and also ships a *native ColBERT multi-vector head*. Resolve at implementation by **reading the hidden size off the loaded model config** (never hardcode - the SPEC-0004 `1024 -> 1152` bug is the cautionary precedent), and decide whether to project BGE-M3's native ColBERT token vectors or its last-hidden-state token embeddings. Recommendation: project last-hidden-state token embeddings; benchmark against the native ColBERT vectors as an ablation.
+- **Q1 (blocks implementation)**: BGE-M3 head input width. proposal 08 part 3.2 step 3 writes the head as `768 -> 384 -> 384`, but BGE-M3 (XLM-RoBERTa-large) has hidden size **1024** and also ships a *native ColBERT multi-vector head*. Resolve at implementation by **reading the hidden size off the loaded model config** (never hardcode - the SPEC-0004 `1024 -> 1152` bug is the cautionary precedent), and decide whether to project BGE-M3's native ColBERT token vectors or its last-hidden-state token embeddings. Recommendation: project last-hidden-state token embeddings; benchmark against the native ColBERT vectors as an ablation. **Resolved (implementation):** `BgeM3Backbone` reads `model.config.hidden_size` (no hardcoded dim) and exposes last-hidden-state token embeddings; the head projects those, MaxSim is **mean-pooled over query tokens** (score in [-1, 1] so temperature 0.05 behaves like standard InfoNCE). Native-ColBERT-vector projection remains a future ablation.
 - **Q2**: noise-schedule realism. The `Beta(2, 5)` drop rate is an assumption. proposal 04 part 6 (risk row) says validate it against a ~200-sample slice of real PhoWhisper / PaddleOCR output and retune. That real slice does not exist until we have ASR/OCR over the corpus (post-June-25). Until then, sanity-check the noise visually against a handful of known PhoWhisper error examples and record the assumption in `train_meta.json`.
 - **Q3**: dataset-id verification. The KTVIC / UIT-OpenViIC / VIVOS / Bud500 HF ids must be confirmed on the box (the `DEFAULT_SOURCES` list holds best-known ids; `<uit-openviic-hf-id>` is an explicit placeholder). The builder is fault-tolerant, so an unavailable source degrades gracefully. The exact datasets that land in corpus v1 are recorded in `train_meta.json` for provenance.
 - **Q4**: hard-negative mining requires a BGE-M3 forward pass over the clean side (a one-time embed, minutes on the H200 for a few hundred thousand strings). CI / fixture mode falls back to random in-corpus negatives. Confirm in an ablation that mined negatives beat random by enough to justify the extra pass.
@@ -232,3 +232,4 @@ bin/train c1-eval   --checkpoint runs/c1 --queries eval/diacritic_dev.txt [--k 1
 | Date | Author | Change |
 |---|---|---|
 | 2026-05-30 | implementer (user-directed) | Created at status **Draft** for review (user chose spec-first). Scopes C1 as a now-trainable contribution on **public** Vietnamese caption + ASR text (KTVIC + UIT-OpenViIC + VIVOS + Bud500), with an identical post-June-25 re-run over our own index text. Implementation is gated on user approval of this spec. |
+| 2026-05-30 | implementer | **Implemented** (status Draft -> Implementing). Shipped `train/diacritic_noise.py`, `train/diacritic_corpus.py`, `train/diacritic_bert.py`, `eval/diacritic_robustness.py`, the `train-c1` job, and the `bin/train` CLI; `train` extra + `pyarrow` (dev). AC1-AC5 green (AC3 validated with torch on CPU via an injected stub backbone; loss decreases, backbone frozen). Q1 resolved (read dim from model; last-hidden tokens; mean-pooled MaxSim). v1 decisions: training uses **in-batch negatives** (the mined `hard_negs` column is carried in the corpus but not yet consumed - Q4 follow-up); the degradation eval runs against single-vector encoders, **head-as-encoder MaxSim retrieval is a follow-up**. |
