@@ -35,6 +35,21 @@ def _logger() -> logging.Logger:
     return logging.getLogger("aic2026.cli.train")
 
 
+def _configure_logging() -> None:
+    """INFO for our logs; quiet the chatty HTTP/HF loggers (they flood corpus runs)."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    for noisy in (
+        "httpx",
+        "httpcore",
+        "huggingface_hub",
+        "datasets",
+        "urllib3",
+        "filelock",
+        "fsspec",
+    ):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+
 @app.command("c1-corpus")
 def c1_corpus(
     out: Annotated[Path, typer.Option("--out", help="Output Parquet path.")],
@@ -46,7 +61,7 @@ def c1_corpus(
     seed: Annotated[int, typer.Option("--seed", help="Determinism seed.")] = 0,
 ) -> None:
     """Build the contrastive corpus from the default public Vietnamese sources."""
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    _configure_logging()
     from aic2026.train.diacritic_corpus import build_corpus
 
     res = build_corpus(out=out, k=k, max_per_source=max_per_source, seed=seed)
@@ -71,7 +86,7 @@ def c1_fit(
     seed: Annotated[int, typer.Option("--seed")] = 0,
 ) -> None:
     """Train the DiacriticBERT projection head over a frozen backbone."""
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    _configure_logging()
     from aic2026.train.diacritic_bert import TrainConfig, train_diacritic_head
 
     cfg = TrainConfig(
