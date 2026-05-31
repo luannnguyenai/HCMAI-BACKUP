@@ -100,30 +100,122 @@ def c1_fit(
     raise typer.Exit(EXIT_OK)
 
 
+def _load_queries(queries_file: Path | None, build_heldout: int, exclude: Path | None) -> list[str]:
+    """Resolve the eval query list: a file, or harvested held-out queries.
+
+    Exactly one of ``--queries`` / ``--build-heldout`` must be provided.
+    """
+    if (queries_file is None) == (build_heldout <= 0):
+        msg = "exactly one of --queries or --build-heldout (positive int) must be set"
+        raise typer.BadParameter(msg)
+    if queries_file is not None:
+        qs = [
+            ln.strip() for ln in queries_file.read_text(encoding="utf-8").splitlines() if ln.strip()
+        ]
+        if not qs:
+            raise typer.BadParameter(f"no queries in {queries_file}")
+        return qs
+    from aic2026.eval.diacritic_robustness import build_heldout_queries
+
+    return build_heldout_queries(build_heldout, exclude_corpus=exclude, seed=0)
+
+
 @app.command("c1-eval")
 def c1_eval(
     queries: Annotated[
-        Path,
+        Path | None,
         typer.Option("--queries", help="Newline-delimited clean Vietnamese queries.", exists=True),
-    ],
+    ] = None,
+    build_heldout: Annotated[
+        int,
+        typer.Option(
+            "--build-heldout",
+            help="Harvest N held-out queries from public sources (disjoint from --exclude).",
+            min=0,
+        ),
+    ] = 0,
+    exclude: Annotated[
+        Path | None,
+        typer.Option("--exclude", help="Training Parquet to exclude anchors from.", exists=True),
+    ] = None,
+    checkpoint: Annotated[
+        Path | None,
+        typer.Option(
+            "--checkpoint",
+            help="Path to head.pt; when set, runs the C1 ship-gate three-way comparison.",
+            exists=True,
+        ),
+    ] = None,
+    backbone: Annotated[str, typer.Option("--backbone")] = "BAAI/bge-m3",
     k: Annotated[int, typer.Option("--k", min=1)] = 10,
     seed: Annotated[int, typer.Option("--seed")] = 0,
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Optional path to write the result JSON."),
+    ] = None,
 ) -> None:
-    """Degradation@k sweep over the queries (DummyEmbedder baseline).
+    """Degradation@k sweep.
 
-    The trained-head encoder (MaxSim retrieval) is a follow-up; this surface
-    exercises the degradation harness and gives a single-vector baseline number.
+    Two modes:
+
+    * **--checkpoint head.pt** (real ship-gate): loads frozen BGE-M3 + the
+      trained head and runs the three-way comparison (C1 on vs raw BGE-M3
+      MaxSim vs BGE-M3 dense). Needs the ``train`` extra + a GPU is helpful.
+    * **No --checkpoint** (smoke): runs degradation@k against ``DummyEmbedder``
+      for a CPU-friendly single-vector baseline that exercises the harness.
     """
-    from aic2026.embedding.dummy import DummyEmbedder
-    from aic2026.eval.diacritic_robustness import degradation_at_k
+    _configure_logging()
+    qs = _load_queries(queries, build_heldout, exclude)
 
-    qs = [ln.strip() for ln in queries.read_text(encoding="utf-8").splitlines() if ln.strip()]
-    if not qs:
-        typer.secho("ERROR: no queries in file.", err=True, fg=typer.colors.RED)
-        raise typer.Exit(2)
-    res = degradation_at_k(qs, DummyEmbedder(dim=256), k=k, seed=seed)
-    for key, val in res.items():
-        typer.echo(f"{key:>12}: {val:.4f}")
+    if checkpoint is None:
+        from aic2026.embedding.dummy import DummyEmbedder
+        from aic2026.eval.diacritic_robustness import degradation_at_k
+
+        res = degradation_at_k(qs, DummyEmbedder(dim=256), k=k, seed=seed)
+        for key, val in res.items():
+            typer.echo(f"{key:>12}: {val:.4f}")
+        if out is not None:
+            import json
+
+            out.write_text(json.dumps(res, indent=2), encoding="utf-8")
+        raise typer.Exit(EXIT_OK)
+
+    # Ship-gate path: load BGE-M3 + head and run the three-way comparison.
+    from aic2026.eval.diacritic_robustness import compare_c1_vs_baselines
+    from aic2026.eval.retrievers import load_head
+    from aic2026.train.diacritic_bert import BgeM3Backbone
+
+    typer.echo(f"loading backbone: {backbone}")
+    bb = BgeM3Backbone(backbone)
+    typer.echo(f"loading head: {checkpoint}")
+    head = load_head(checkpoint)
+
+    typer.echo(
+        f"running degradation@{k} on {len(qs)} queries (c1_on / baseline_maxsim / baseline_dense)"
+    )
+    result = compare_c1_vs_baselines(qs, backbone=bb, head=head, k=k, seed=seed)
+    sg = result["ship_gate"]
+
+    def _line(label: str, block: dict[str, float]) -> None:
+        per = "  ".join(f"{m:>11}={block[m]:.4f}" for m in result["modes"])
+        typer.echo(f"{label:>16} overall={block['overall']:.4f}  {per}")
+
+    _line("c1_on", result["c1_on"])
+    _line("baseline_maxsim", result["baseline_maxsim"])
+    _line("baseline_dense", result["baseline_dense"])
+    typer.echo(
+        f"ship_gate: target>={sg['target']:.2f}  "
+        f"passes_absolute={sg['passes_absolute']}  "
+        f"beats_maxsim={sg['beats_baseline_maxsim']}  "
+        f"beats_dense={sg['beats_baseline_dense']}  "
+        f"VERDICT={'PASS' if sg['passes_ship_gate'] else 'FAIL'}"
+    )
+
+    if out is not None:
+        import json
+
+        out.write_text(json.dumps(result, indent=2), encoding="utf-8")
+        typer.echo(f"wrote {out}")
     raise typer.Exit(EXIT_OK)
 
 
