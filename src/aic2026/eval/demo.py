@@ -75,15 +75,26 @@ class CannedExample:
 
 
 CANNED_EXAMPLES: tuple[CannedExample, ...] = (
+    # --- Diacritic loss (drop_all) -------------------------------------------
     CannedExample(
         id="ex1_drop_all_placename",
         vi_explanation=(
-            "Toàn bộ dấu bị mất — thường gặp khi OCR chụp biển hiệu cũ "
-            "hoặc font không hỗ trợ tiếng Việt"
+            "Mất toàn bộ dấu — gặp khi OCR đọc biển hiệu cũ hoặc font "
+            "không hỗ trợ tiếng Việt"
         ),
         clean_target="Hà Nội là thủ đô của Việt Nam",
         mode=NoiseMode.DROP_ALL,
     ),
+    CannedExample(
+        id="ex10_drop_all_heritage",
+        vi_explanation=(
+            "Mất dấu trên câu dài — chú ý từ nước ngoài (UNESCO) vốn không "
+            "có dấu nên không đổi"
+        ),
+        clean_target="Vịnh Hạ Long là di sản thiên nhiên thế giới được UNESCO công nhận",
+        mode=NoiseMode.DROP_ALL,
+    ),
+    # --- Visual confusables (char_confuse) -----------------------------------
     CannedExample(
         id="ex2_char_confuse_address",
         vi_explanation=(
@@ -94,28 +105,90 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
         mode=NoiseMode.CHAR_CONFUSE,
     ),
     CannedExample(
+        id="ex11_char_confuse_news",
+        vi_explanation=(
+            "Nhầm ký tự trên tỉ số thể thao (3→E, 0→o) — OCR đọc sai số "
+            "liệu trong khung hình"
+        ),
+        clean_target="Đội tuyển Việt Nam thắng 3 0 trước Thái Lan",
+        mode=NoiseMode.CHAR_CONFUSE,
+    ),
+    # --- Segmentation + tonal (word_merge / homophone_swap) ------------------
+    CannedExample(
+        id="ex4_word_merge_phrase",
+        vi_explanation=(
+            "Mất khoảng trắng giữa các từ (under-segmentation) — OCR cleaner "
+            "gộp các từ liền nhau"
+        ),
+        clean_target="quả táo đỏ trên bàn",
+        mode=NoiseMode.WORD_MERGE,
+        noise_seed=6,
+    ),
+    CannedExample(
+        id="ex12_homophone_singer",
+        vi_explanation=(
+            "Lỗi đồng-âm-khác-dấu của ASR (PhoWhisper): 'Mỹ Tâm' → 'Mỹ Tấm' — "
+            "đây là lỗi tone_swap không bắt được vì nó neo theo dấu sẵn có"
+        ),
+        clean_target="Ca sĩ Mỹ Tâm biểu diễn tại nhà hát lớn Hà Nội",
+        mode=NoiseMode.HOMOPHONE_SWAP,
+        noise_seed=2,
+    ),
+    # --- Realistic combined OCR noise (mixed_ocr) — the mode C1 wins on -------
+    CannedExample(
         id="ex3_mixed_ocr_long",
         vi_explanation=(
             "Tổ hợp nhiễu OCR thực tế (mất dấu + nhầm ký tự + tách chữ) — "
-            "C1 thắng nhiều nhất ở chế độ này trong eval v3 (+6.4pp so với v2)"
+            "C1 thắng nhiều nhất ở chế độ này (eval v3: +6.4pp so với v2)"
         ),
         clean_target="Cuộc thi AI Challenge sẽ tổ chức tại Hà Nội vào tháng 7",
         mode=NoiseMode.MIXED_OCR,
     ),
     CannedExample(
-        id="ex4_word_merge_phrase",
+        id="ex6_mixed_ocr_gold_price",
         vi_explanation=(
-            "Mất khoảng cách giữa các từ (under-segmentation) — OCR cleaner "
-            "đôi khi gộp từ liền nhau"
+            "Nhiễu OCR trên câu tin tức có số liệu (75 → Ts) — cả chữ lẫn "
+            "số đều hỏng"
         ),
-        clean_target="quả táo đỏ trên bàn",
-        mode=NoiseMode.WORD_MERGE,
+        clean_target="Giá vàng trong nước tăng lên 75 triệu đồng một lượng",
+        mode=NoiseMode.MIXED_OCR,
+        noise_seed=5,
     ),
+    CannedExample(
+        id="ex7_mixed_ocr_lifelog",
+        vi_explanation=(
+            "Nhiễu OCR trên câu mô tả cảnh (truy vấn lifelog điển hình) — "
+            "địa danh 'Long Biên' bị phá thành 'L0nq 8ieh'"
+        ),
+        clean_target="Người phụ nữ mặc áo dài trắng đi trên cầu Long Biên",
+        mode=NoiseMode.MIXED_OCR,
+        noise_seed=5,
+    ),
+    CannedExample(
+        id="ex8_mixed_ocr_stadium",
+        vi_explanation=(
+            "Nhiễu OCR trên câu nhiều địa danh — tên riêng 'Mỹ Đình', "
+            "'Nam Từ Liêm' khó phục hồi"
+        ),
+        clean_target="Sân vận động quốc gia Mỹ Đình nằm ở quận Nam Từ Liêm",
+        mode=NoiseMode.MIXED_OCR,
+        noise_seed=2,
+    ),
+    CannedExample(
+        id="ex9_mixed_ocr_flight",
+        vi_explanation=(
+            "Nhiễu OCR trên mã chuyến bay (1546 → IsAG) — mã chữ-số là "
+            "trường hợp tệ nhất cho OCR"
+        ),
+        clean_target="Chuyến bay VN 1546 khởi hành lúc 8 giờ sáng tại Tân Sơn Nhất",
+        mode=NoiseMode.MIXED_OCR,
+    ),
+    # --- Control (no noise) — keep last --------------------------------------
     CannedExample(
         id="ex5_clean_sanity",
         vi_explanation=(
             "Đối chứng — câu sạch không nhiễu: cả ba bộ truy hồi đều phải "
-            "đứng top-1"
+            "đứng top-1 (chứng minh C1 không làm hỏng truy vấn sạch)"
         ),
         clean_target="Trường Đại học Bách khoa Hà Nội",
         mode=None,

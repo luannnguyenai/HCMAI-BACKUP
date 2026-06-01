@@ -13,12 +13,12 @@
 #   $1 = mode {canned, interactive, both}  (default canned)
 #   $2 = code-dir SHA7                      (default 7f18c88; matches c1_eval.sh)
 #   $3 = baseline SHA7 to restore from R2   (default = $2)
-#   $4 = n_docs (index size)                (default 300)
+#   $4 = n_docs (index size)                (default 2000)
 
 MODE="${1:-canned}"
 SHA7="${2:-7f18c88}"
 BASELINE_SHA="${3:-$SHA7}"
-N_DOCS="${4:-300}"
+N_DOCS="${4:-2000}"
 DIR="$HOME/aic2026/$SHA7"
 
 export PATH="$HOME/.local/bin:$PATH"

@@ -261,10 +261,14 @@ def c1_demo(
         int,
         typer.Option(
             "--n-docs",
-            help="Held-out Vietnamese docs to index (disjoint from --pairs).",
+            help=(
+                "Held-out Vietnamese docs to index (disjoint from --pairs). "
+                "Default 2000 de-saturates the index so the mixed_ocr wins are "
+                "visible; drop to ~300 for a faster (but more tie-heavy) run."
+            ),
             min=10,
         ),
-    ] = 300,
+    ] = 2000,
     backbone: Annotated[str, typer.Option("--backbone")] = "BAAI/bge-m3",
     top_k: Annotated[int, typer.Option("--top-k", min=1)] = 3,
     seed: Annotated[int, typer.Option("--seed")] = 0,

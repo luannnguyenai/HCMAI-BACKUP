@@ -60,13 +60,48 @@ def test_canned_clean_sanity_returns_clean_AC1() -> None:
 
 def test_canned_examples_cover_v3_modes_AC1() -> None:
     """The canned set should exhibit at least DROP_ALL, CHAR_CONFUSE, MIXED_OCR,
-    WORD_MERGE, and one clean-sanity example."""
+    WORD_MERGE, HOMOPHONE_SWAP, and one clean-sanity example."""
     modes = {ex.mode for ex in CANNED_EXAMPLES}
     assert NoiseMode.DROP_ALL in modes
     assert NoiseMode.CHAR_CONFUSE in modes
     assert NoiseMode.MIXED_OCR in modes
     assert NoiseMode.WORD_MERGE in modes
+    assert NoiseMode.HOMOPHONE_SWAP in modes
     assert None in modes
+
+
+def test_canned_set_size_and_mixed_ocr_emphasis_AC1() -> None:
+    """At least 10 examples, with mixed_ocr (the mode C1 wins on) most-represented.
+
+    Locks the demo-scope decision: a 12-example set weighted toward mixed_ocr so
+    the showcase spends most of its airtime on the realistic-worst-case mode.
+    Also guards against duplicate ids (which would collide the per-example noise
+    RNG) and a non-control final example (the clean-sanity control must stay last
+    so it reads as the closing parity check)."""
+    assert len(CANNED_EXAMPLES) >= 10
+    ids = [e.id for e in CANNED_EXAMPLES]
+    assert len(ids) == len(set(ids)), "canned example ids must be unique"
+
+    n_mixed = sum(1 for e in CANNED_EXAMPLES if e.mode is NoiseMode.MIXED_OCR)
+    assert n_mixed >= 3, "mixed_ocr should be the emphasised mode"
+
+    # Exactly one clean-sanity control, and it is the last example.
+    n_clean = sum(1 for e in CANNED_EXAMPLES if e.mode is None)
+    assert n_clean == 1
+    assert CANNED_EXAMPLES[-1].mode is None
+
+
+def test_canned_every_noised_example_actually_changes_AC1() -> None:
+    """Every non-control example's baked-in seed must produce visible noise.
+
+    Guards the demo against a 'lucky' seed that leaves the query (nearly)
+    unchanged - a non-event on stage. We require the noised form to differ from
+    the clean target for all modes except the clean-sanity control."""
+    for ex in CANNED_EXAMPLES:
+        if ex.mode is None:
+            assert ex.make_noised() == ex.clean_target
+        else:
+            assert ex.make_noised() != ex.clean_target, f"{ex.id} produced no noise"
 
 
 # ---- index building ---------------------------------------------------------
