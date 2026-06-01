@@ -25,6 +25,19 @@ Two categories of noise are modelled:
         ``rn <-> m``, ``cl <-> d``. These bite hardest on proper nouns +
         addresses + numerals.
 
+  * **v3 schedule** (Tier A from the Hoang & Aw 2012 taxonomy survey):
+      - **word merging** (Class 3 under-segmentation): inverse of space_split.
+        ``quả táo`` -> ``quảtáo`` when the OCR or OCR-cleaner loses a space.
+      - **homophone swap** (Class 2 real-syllable substitution; the dominant
+        PhoWhisper failure): vowel-anchored tone re-assignment that can ADD a
+        tone to a level syllable (``ma`` -> ``má``) as well as remove or swap
+        an existing tone (``chợ`` -> ``cho``). The crucial distinction vs
+        ``tone_swap`` is that the latter is mark-anchored (won't trigger on
+        syllables without a current tone mark); ``homophone_swap`` is
+        vowel-anchored so the full tonal-homophone family is reachable.
+      - **case noise** (Class 3): per-word random case transform. Common on
+        scene text (signs, banners) where OCR captures unusual case patterns.
+
 Everything is pure and deterministic given ``(text, mode, rng)``; non-Vietnamese
 characters pass through unchanged; arbitrary Unicode never raises.
 """
@@ -77,19 +90,33 @@ _CONFUSABLES_2 = (
     ("d", "cl"),
 )
 
+# Vietnamese vowel set used by ``homophone_swap``. Includes the ASCII vowels
+# plus the four NFC base-modified vowels (ă, â, ê, ô, ơ, ư) so we can re-tone
+# even a syllable that already has a base modifier but no tone (``cô`` -> ``cồ``).
+# ``y`` is a Vietnamese semivowel that can carry tone and is included.
+_VIETNAMESE_VOWELS: frozenset[str] = frozenset(
+    "aeiouyAEIOUY"
+    "\u0103\u00e2\u00ea\u00f4\u01a1\u01b0"  # ă â ê ô ơ ư
+    "\u0102\u00c2\u00ca\u00d4\u01a0\u01af"  # Ă Â Ê Ô Ơ Ư
+)
+
 
 class NoiseMode(StrEnum):
-    """The diacritic + OCR-noise modes (proposal 08 part 3.2 step 1, extended v2)."""
+    """The diacritic + OCR-noise modes (proposal 08 part 3.2 step 1, extended v3)."""
 
     # Diacritic-focused (v1)
     DROP_ALL = "drop_all"  # strip every diacritic + tone -> "tre em"
     RANDOM_DROP = "random_drop"  # drop each mark w.p. p ~ Beta(2, 5) per string
-    TONE_SWAP = "tone_swap"  # swap a present tone for a different tone
+    TONE_SWAP = "tone_swap"  # swap a present tone for a different tone (mark-anchored)
     MIXED = "mixed"  # random_drop composed with tone_swap
     # OCR-character noise (v2)
     SPACE_SPLIT = "space_split"  # "quả táo" -> "q u ả  t á o" (per-word, w.p. p)
     CHAR_CONFUSE = "char_confuse"  # visual shape confusion (5<->S, 1<->l, ...)
     MIXED_OCR = "mixed_ocr"  # random_drop + space_split + char_confuse
+    # OCR/ASR additions (v3 Tier A; Hoang & Aw 2012 Class 2/3)
+    WORD_MERGE = "word_merge"  # Class 3 under-segmentation: "quả táo" -> "quảtáo"
+    HOMOPHONE_SWAP = "homophone_swap"  # Class 2 ASR: ma <-> má <-> mã <-> mả ... (vowel-anchored)
+    CASE_NOISE = "case_noise"  # Class 3: per-word random lower/upper/title
 
 
 def _nfd(text: str) -> str:
@@ -201,6 +228,112 @@ def char_confuse(text: str, p: float, rng: random.Random) -> str:
     return "".join(out)
 
 
+def word_merge(text: str, p: float, rng: random.Random) -> str:
+    """OCR under-segmentation: drop the space between consecutive words w.p. ``p``.
+
+    Symmetric inverse of ``space_split``. ``"quả táo Hà Nội"`` -> ``"quảtáo Hà Nội"``
+    or ``"quả táoHà Nội"`` depending on which gaps fire. Single-word and empty
+    inputs pass through.
+
+    Implementation: split on a single space (preserves any other whitespace as-is
+    inside words), then for each adjacent pair, with prob ``p`` join them with
+    no space; otherwise re-insert the space. This is Class 3 from Hoang & Aw 2012.
+    """
+    if not text:
+        return text
+    words = text.split(" ")
+    if len(words) < 2:
+        return text
+    out = [words[0]]
+    for w in words[1:]:
+        sep = "" if rng.random() < p else " "
+        out.append(sep + w)
+    return "".join(out)
+
+
+def _random_case(word: str, rng: random.Random) -> str:
+    """Apply one of {lower, upper, title} uniformly, excluding the identity."""
+    candidates = []
+    for transform in (str.lower, str.upper, str.title):
+        candidate = transform(word)
+        if candidate != word:
+            candidates.append(candidate)
+    if not candidates:
+        return word
+    return rng.choice(candidates)
+
+
+def case_noise(text: str, p: float, rng: random.Random) -> str:
+    """Per-word random casing: each word, w.p. ``p``, gets lower/upper/title applied.
+
+    ``"Hà Nội mùa thu"`` p=1.0 -> e.g. ``"HÀ Nội mùa THU"``. The transform is
+    chosen uniformly from {lower, upper, title} excluding the identity (so a
+    triggered word always actually changes when the input has at least one
+    transformable character). Class 3 from Hoang & Aw 2012.
+    """
+    if not text or p <= 0:
+        return text
+    return " ".join(_random_case(w, rng) if rng.random() < p else w for w in text.split(" "))
+
+
+def _retone_at_vowel(decomposed: list[str], i: int, rng: random.Random, out: list[str]) -> int:
+    """Consume the combining-mark run after ``decomposed[i]`` (a vowel), strip any
+    existing tone, append a new tone different from the current one (or none),
+    and return the next index to process. ``out`` is appended in place.
+    """
+    n = len(decomposed)
+    current_tone: str | None = None
+    j = i + 1
+    while j < n and unicodedata.combining(decomposed[j]):
+        if decomposed[j] in _TONE_SET and current_tone is None:
+            current_tone = decomposed[j]  # captured + dropped from output
+        else:
+            out.append(decomposed[j])  # keep horn/breve/circumflex/etc.
+        j += 1
+    choices = [t for t in (None, *TONE_MARKS) if t != current_tone]
+    new_tone = rng.choice(choices)
+    if new_tone is not None:
+        out.append(new_tone)
+    return j
+
+
+def homophone_swap(text: str, p: float, rng: random.Random) -> str:
+    """Vowel-anchored tone re-assignment.
+
+    For each Vietnamese vowel (in NFD), with prob ``p`` strip any combining tone
+    mark immediately following it and append a new tone chosen uniformly from
+    ``{None, *TONE_MARKS}`` constrained to differ from the current tone. Then
+    NFC-recompose. This is the Class 2 ASR real-syllable error from Hoang & Aw
+    2012: ``ma`` can become ``má`` / ``mã`` / ``mả`` / ``mạ`` / ``mà`` (the full
+    tonal-homophone family) and ``chợ`` can become ``chơ`` / ``chò`` / ``chỏ`` etc.
+
+    Crucial distinction vs ``tone_swap`` (mark-anchored): ``tone_swap`` only fires
+    on syllables that already have a tone mark, so ``ma`` -> ``má`` is impossible
+    there. ``homophone_swap`` is vowel-anchored, so the whole homophone family is
+    reachable in both directions.
+
+    Simplification: this is per-vowel, not per-syllable-nucleus. Syllables with
+    multiple vowels (e.g. ``chuyển``) can therefore end up with multiple tone
+    marks (``chùyển``), which is mechanically what real PhoWhisper sometimes
+    produces when it mis-positions a tone. A linguistically-correct per-nucleus
+    implementation would need full Vietnamese tone-placement rules; deferred.
+    """
+    if not text or p <= 0:
+        return text
+    decomposed = list(_nfd(text))
+    out: list[str] = []
+    i = 0
+    n = len(decomposed)
+    while i < n:
+        ch = decomposed[i]
+        out.append(ch)
+        if ch in _VIETNAMESE_VOWELS and rng.random() < p:
+            i = _retone_at_vowel(decomposed, i, rng, out)
+        else:
+            i += 1
+    return _nfc("".join(out))
+
+
 def _mixed(text: str, rng: random.Random) -> str:
     """Diacritic-focused mixed: random_drop + tone_swap."""
     dropped = random_drop(text, rng.betavariate(2, 5), rng)
@@ -227,6 +360,10 @@ _NOISE_DISPATCH: dict[NoiseMode, Callable[[str, random.Random], str]] = {
     NoiseMode.SPACE_SPLIT: lambda t, rng: space_split(t, rng.betavariate(2, 5), rng),
     NoiseMode.CHAR_CONFUSE: lambda t, rng: char_confuse(t, rng.betavariate(2, 5), rng),
     NoiseMode.MIXED_OCR: _mixed_ocr,
+    # v3 Tier A
+    NoiseMode.WORD_MERGE: lambda t, rng: word_merge(t, rng.betavariate(2, 5), rng),
+    NoiseMode.HOMOPHONE_SWAP: lambda t, rng: homophone_swap(t, rng.betavariate(2, 5), rng),
+    NoiseMode.CASE_NOISE: lambda t, rng: case_noise(t, rng.betavariate(2, 5), rng),
 }
 
 
