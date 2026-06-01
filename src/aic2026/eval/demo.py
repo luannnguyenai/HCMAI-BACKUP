@@ -79,8 +79,7 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
     CannedExample(
         id="ex1_drop_all_placename",
         vi_explanation=(
-            "Mất toàn bộ dấu — gặp khi OCR đọc biển hiệu cũ hoặc font "
-            "không hỗ trợ tiếng Việt"
+            "Mất toàn bộ dấu — gặp khi OCR đọc biển hiệu cũ hoặc font không hỗ trợ tiếng Việt"
         ),
         clean_target="Hà Nội là thủ đô của Việt Nam",
         mode=NoiseMode.DROP_ALL,
@@ -88,8 +87,7 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
     CannedExample(
         id="ex10_drop_all_heritage",
         vi_explanation=(
-            "Mất dấu trên câu dài — chú ý từ nước ngoài (UNESCO) vốn không "
-            "có dấu nên không đổi"
+            "Mất dấu trên câu dài — chú ý từ nước ngoài (UNESCO) vốn không có dấu nên không đổi"
         ),
         clean_target="Vịnh Hạ Long là di sản thiên nhiên thế giới được UNESCO công nhận",
         mode=NoiseMode.DROP_ALL,
@@ -98,8 +96,7 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
     CannedExample(
         id="ex2_char_confuse_address",
         vi_explanation=(
-            "Nhầm chữ số với chữ cái (5↔S, 1↔l, 0↔O) — phổ biến trên "
-            "biển số nhà và địa chỉ"
+            "Nhầm chữ số với chữ cái (5↔S, 1↔l, 0↔O) — phổ biến trên biển số nhà và địa chỉ"
         ),
         clean_target="Số 5 đường Lê Lợi, Quận 1",
         mode=NoiseMode.CHAR_CONFUSE,
@@ -107,8 +104,7 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
     CannedExample(
         id="ex11_char_confuse_news",
         vi_explanation=(
-            "Nhầm ký tự trên tỉ số thể thao (3→E, 0→o) — OCR đọc sai số "
-            "liệu trong khung hình"
+            "Nhầm ký tự trên tỉ số thể thao (3→E, 0→o) — OCR đọc sai số liệu trong khung hình"
         ),
         clean_target="Đội tuyển Việt Nam thắng 3 0 trước Thái Lan",
         mode=NoiseMode.CHAR_CONFUSE,
@@ -117,8 +113,7 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
     CannedExample(
         id="ex4_word_merge_phrase",
         vi_explanation=(
-            "Mất khoảng trắng giữa các từ (under-segmentation) — OCR cleaner "
-            "gộp các từ liền nhau"
+            "Mất khoảng trắng giữa các từ (under-segmentation) — OCR cleaner gộp các từ liền nhau"
         ),
         clean_target="quả táo đỏ trên bàn",
         mode=NoiseMode.WORD_MERGE,
@@ -146,10 +141,7 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
     ),
     CannedExample(
         id="ex6_mixed_ocr_gold_price",
-        vi_explanation=(
-            "Nhiễu OCR trên câu tin tức có số liệu (75 → Ts) — cả chữ lẫn "
-            "số đều hỏng"
-        ),
+        vi_explanation=("Nhiễu OCR trên câu tin tức có số liệu (75 → Ts) — cả chữ lẫn số đều hỏng"),
         clean_target="Giá vàng trong nước tăng lên 75 triệu đồng một lượng",
         mode=NoiseMode.MIXED_OCR,
         noise_seed=5,
@@ -167,8 +159,7 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
     CannedExample(
         id="ex8_mixed_ocr_stadium",
         vi_explanation=(
-            "Nhiễu OCR trên câu nhiều địa danh — tên riêng 'Mỹ Đình', "
-            "'Nam Từ Liêm' khó phục hồi"
+            "Nhiễu OCR trên câu nhiều địa danh — tên riêng 'Mỹ Đình', 'Nam Từ Liêm' khó phục hồi"
         ),
         clean_target="Sân vận động quốc gia Mỹ Đình nằm ở quận Nam Từ Liêm",
         mode=NoiseMode.MIXED_OCR,
@@ -177,8 +168,7 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
     CannedExample(
         id="ex9_mixed_ocr_flight",
         vi_explanation=(
-            "Nhiễu OCR trên mã chuyến bay (1546 → IsAG) — mã chữ-số là "
-            "trường hợp tệ nhất cho OCR"
+            "Nhiễu OCR trên mã chuyến bay (1546 → IsAG) — mã chữ-số là trường hợp tệ nhất cho OCR"
         ),
         clean_target="Chuyến bay VN 1546 khởi hành lúc 8 giờ sáng tại Tân Sơn Nhất",
         mode=NoiseMode.MIXED_OCR,
@@ -199,9 +189,7 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
 # ---- index building ---------------------------------------------------------
 
 
-def _build_index(
-    doc_pool: Iterable[str], canned: Iterable[CannedExample]
-) -> list[str]:
+def _build_index(doc_pool: Iterable[str], canned: Iterable[CannedExample]) -> list[str]:
     """Dedupe ``doc_pool`` (insertion order), then append any canned target
     not already present. The gold target for every canned example is therefore
     guaranteed to be in the returned index."""
@@ -285,9 +273,7 @@ def format_example_block(
 # ---- canned runner ----------------------------------------------------------
 
 
-def _tally_verdict(
-    ranks: Mapping[str, int], c1_label: str
-) -> str:
+def _tally_verdict(ranks: Mapping[str, int], c1_label: str) -> str:
     """Return 'win' / 'tie' / 'loss' for C1 relative to the best baseline."""
     if c1_label not in ranks:
         return "n/a"

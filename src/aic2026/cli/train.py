@@ -288,9 +288,7 @@ def c1_demo(
     _configure_logging()
     mode_norm = mode.strip().lower()
     if mode_norm not in {"canned", "interactive", "both"}:
-        raise typer.BadParameter(
-            f"--mode must be one of canned/interactive/both; got {mode!r}"
-        )
+        raise typer.BadParameter(f"--mode must be one of canned/interactive/both; got {mode!r}")
 
     from aic2026.eval.demo import (
         C1_LABEL_DEFAULT,
