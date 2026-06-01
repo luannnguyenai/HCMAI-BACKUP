@@ -35,7 +35,10 @@ def train_c1(ctx: RunContext, config: dict[str, Any]) -> None:
     out = Path(ctx.local_run_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    k = int(config.get("k", "4"))
+    # k = 0 (default) -> "one of each NoiseMode" in the v2 schedule (diacritic + OCR).
+    # An explicit positive k truncates / extends the cycle.
+    k_raw = int(config.get("k", "0"))
+    k = k_raw or None
     seed = int(config.get("seed", "0"))
 
     pairs_path = config.get("pairs_path")

@@ -40,12 +40,10 @@ if TYPE_CHECKING:  # pragma: no cover - typing-only
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODES: tuple[NoiseMode, ...] = (
-    NoiseMode.DROP_ALL,
-    NoiseMode.RANDOM_DROP,
-    NoiseMode.TONE_SWAP,
-    NoiseMode.MIXED,
-)
+DEFAULT_MODES: tuple[NoiseMode, ...] = tuple(NoiseMode)
+"""Every mode in the v2 schedule -- diacritic-focused (DROP_ALL / RANDOM_DROP /
+TONE_SWAP / MIXED) and OCR-character (SPACE_SPLIT / CHAR_CONFUSE / MIXED_OCR).
+The sweep reports degradation@k per mode + an overall average across them."""
 
 SHIP_GATE_TARGET: float = 0.85
 """Proposal 05 SS 13.1: with C1 on, target ``degradation@10 >= 0.85``."""

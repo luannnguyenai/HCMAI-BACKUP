@@ -20,7 +20,7 @@ import logging
 import os
 import random
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -107,22 +107,29 @@ def _looks_like_prose(value: str) -> bool:
     return " " in v and len(v) >= 15 and "://" not in v
 
 
+def _strings_from_value(
+    val: object, *, predicate: Callable[[str], bool] | None = None
+) -> list[str]:
+    """Coerce a row value into a list of strings, optionally filtered by ``predicate``.
+
+    Handles both plain strings and lists of strings (HF datasets often nest captions).
+    """
+    if isinstance(val, str):
+        return [val] if (predicate is None or predicate(val)) else []
+    if isinstance(val, list):
+        return [x for x in val if isinstance(x, str) and (predicate is None or predicate(x))]
+    return []
+
+
 def _row_strings(row: dict, spec: SourceSpec) -> list[str]:
     """Pull candidate strings from one row, honouring text_fields or auto-detecting."""
     raw: list[str] = []
     if spec.text_fields:
         for fld in spec.text_fields:
-            val = row.get(fld)
-            if isinstance(val, str):
-                raw.append(val)
-            elif isinstance(val, list):
-                raw.extend(x for x in val if isinstance(x, str))
+            raw.extend(_strings_from_value(row.get(fld)))
     else:  # auto-detect: any string-ish column that reads like prose
         for val in row.values():
-            if isinstance(val, str) and _looks_like_prose(val):
-                raw.append(val)
-            elif isinstance(val, list):
-                raw.extend(x for x in val if isinstance(x, str) and _looks_like_prose(x))
+            raw.extend(_strings_from_value(val, predicate=_looks_like_prose))
     if spec.split_sentences:
         out: list[str] = []
         for s in raw:
@@ -144,7 +151,7 @@ def _harvest_source(spec: SourceSpec, *, max_rows: int | None) -> list[str]:
     if feats:
         from datasets import Image as HfImage
 
-        for fname, feat in list(feats.items()):
+        for fname, feat in feats.items():
             if feat.__class__.__name__ == "Image":
                 ds = ds.cast_column(fname, HfImage(decode=False))
 
@@ -208,13 +215,18 @@ def build_corpus(
     sources: Sequence[SourceSpec] = DEFAULT_SOURCES,
     *,
     out: Path,
-    k: int = 4,
+    k: int | None = None,
     max_per_source: int | None = None,
     hard_negatives: int = 7,
     seed: int = 0,
     clean_strings: Sequence[str] | None = None,
 ) -> CorpusResult:
     """Harvest clean strings -> dedup -> k noisy variants -> mine negatives -> Parquet.
+
+    Default ``k = len(NoiseMode)`` so every noise mode is represented per anchor
+    (the v2 schedule adds OCR-character noise modes on top of the v1 diacritic
+    modes -- see ``train/diacritic_noise.py``). Pass an explicit ``k`` to
+    truncate / extend the cycle.
 
     ``clean_strings`` bypasses HF entirely (used by CI fixtures and, post-June-25,
     by the path that feeds our own index text in). Any source that errors on load

@@ -57,14 +57,25 @@ def c1_corpus(
         int | None,
         typer.Option("--max-per-source", help="Cap rows harvested per HF dataset."),
     ] = None,
-    k: Annotated[int, typer.Option("--k", help="Noisy variants per clean string.", min=1)] = 4,
+    k: Annotated[
+        int,
+        typer.Option(
+            "--k",
+            help=(
+                "Noisy variants per clean string. Default 0 means 'one of each NoiseMode' "
+                "(v2 schedule: 7 modes covering diacritic + OCR noise)."
+            ),
+            min=0,
+        ),
+    ] = 0,
     seed: Annotated[int, typer.Option("--seed", help="Determinism seed.")] = 0,
 ) -> None:
     """Build the contrastive corpus from the default public Vietnamese sources."""
     _configure_logging()
     from aic2026.train.diacritic_corpus import build_corpus
 
-    res = build_corpus(out=out, k=k, max_per_source=max_per_source, seed=seed)
+    # k=0 (CLI default) -> let build_corpus pick "one of each NoiseMode"
+    res = build_corpus(out=out, k=(k or None), max_per_source=max_per_source, seed=seed)
     typer.echo(
         f"OK clean={res.n_clean} pairs={res.n_pairs} out={res.out} "
         f"used={res.sources_used} skipped={res.sources_skipped}"
