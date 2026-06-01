@@ -254,7 +254,7 @@ def c1_demo(
         str,
         typer.Option(
             "--mode",
-            help="One of: canned, interactive, both.",
+            help="One of: canned, interactive, both, tune.",
         ),
     ] = "canned",
     n_docs: Annotated[
@@ -271,30 +271,52 @@ def c1_demo(
     ] = 2000,
     backbone: Annotated[str, typer.Option("--backbone")] = "BAAI/bge-m3",
     top_k: Annotated[int, typer.Option("--top-k", min=1)] = 3,
+    useful_k: Annotated[
+        int,
+        typer.Option(
+            "--useful-k",
+            help=(
+                "Rank threshold for a 'usable' result. A gold beyond top-useful-k "
+                "is graceful-degradation, not a clean win. Drives the verdict."
+            ),
+            min=1,
+        ),
+    ] = 10,
+    sweep_n: Annotated[
+        int,
+        typer.Option("--sweep-n", help="(tune mode) seeds 0..N-1 to sweep per example.", min=2),
+    ] = 16,
     seed: Annotated[int, typer.Option("--seed")] = 0,
 ) -> None:
     """Run a live C1 ship-gate demo.
 
-    ``canned`` (default) prints a fixed set of Vietnamese examples that
-    exercise the failure modes C1 was trained to survive (drop_all, char_confuse,
-    mixed_ocr, word_merge, clean sanity), with a win/tie/loss tally vs
-    raw-MaxSim + dense baselines.
+    ``canned`` (default) prints the curated Vietnamese examples that exercise the
+    failure modes C1 was trained to survive, with an honest verdict per example
+    (C1 THẮNG RÕ / HÒA / C1 TRỤ TỐT HƠN / C1 THUA) judged against a top-``useful-k``
+    usefulness lens, plus a tally.
 
     ``interactive`` drops into a REPL: the audience types a query + optional
     noise mode and sees the same side-by-side block.
 
     ``both`` runs canned first, then interactive.
+
+    ``tune`` sweeps ``noise_seed`` per example and reports a recommended seed
+    (the one giving the cleanest C1 win) - used to re-tune the canned set when
+    the head changes. Needs the GPU; does not print the showcase.
     """
     _configure_logging()
     mode_norm = mode.strip().lower()
-    if mode_norm not in {"canned", "interactive", "both"}:
-        raise typer.BadParameter(f"--mode must be one of canned/interactive/both; got {mode!r}")
+    if mode_norm not in {"canned", "interactive", "both", "tune"}:
+        raise typer.BadParameter(
+            f"--mode must be one of canned/interactive/both/tune; got {mode!r}"
+        )
 
     from aic2026.eval.demo import (
         C1_LABEL_DEFAULT,
         CANNED_EXAMPLES,
         run_canned,
         run_interactive,
+        tune_seeds,
     )
     from aic2026.eval.diacritic_robustness import build_heldout_queries
     from aic2026.eval.retrievers import (
@@ -320,6 +342,17 @@ def c1_demo(
         "Baseline Dense (BGE-M3 vector trung bình)": DenseRetriever(BgeM3DenseEmbedder(bb)),
     }
 
+    if mode_norm == "tune":
+        typer.echo(f"== seed sweep (sweep_n={sweep_n}, useful_k={useful_k}) ==")
+        tune_seeds(
+            retrievers=retrievers,
+            doc_pool=doc_pool,
+            c1_label=c1_label,
+            sweep_n=sweep_n,
+            useful_k=useful_k,
+        )
+        raise typer.Exit(EXIT_OK)
+
     if mode_norm in ("canned", "both"):
         typer.echo(f"== canned showcase ({len(CANNED_EXAMPLES)} examples) ==")
         run_canned(
@@ -327,6 +360,7 @@ def c1_demo(
             doc_pool=doc_pool,
             c1_label=c1_label,
             top_k=top_k,
+            useful_k=useful_k,
         )
     if mode_norm in ("interactive", "both"):
         run_interactive(retrievers=retrievers, doc_pool=doc_pool, top_k=max(top_k, 5))

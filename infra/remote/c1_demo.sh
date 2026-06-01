@@ -6,11 +6,14 @@
 #   scp infra/remote/c1_demo.sh aic2026-gpu:c1_demo.sh
 #   ssh -t aic2026-gpu 'bash c1_demo.sh both'        # canned + interactive REPL
 #   ssh    aic2026-gpu 'bash c1_demo.sh canned'      # canned only, no REPL
+#   ssh    aic2026-gpu 'bash c1_demo.sh tune'        # sweep seeds, recommend best
 #
 # Use `ssh -t` for interactive/both so stdin is a TTY (the REPL needs it).
+# `tune` prints a per-example seed sweep + recommended noise_seed (re-tune the
+# canned set when the head changes), then exits without the showcase.
 #
 # Optional args:
-#   $1 = mode {canned, interactive, both}  (default canned)
+#   $1 = mode {canned, interactive, both, tune}  (default canned)
 #   $2 = code-dir SHA7                      (default 7f18c88; matches c1_eval.sh)
 #   $3 = baseline SHA7 to restore from R2   (default = $2)
 #   $4 = n_docs (index size)                (default 2000)

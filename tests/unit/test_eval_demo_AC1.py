@@ -18,10 +18,13 @@ from aic2026.eval.demo import (
     CANNED_EXAMPLES,
     CannedExample,
     _build_index,
+    _classify_verdict,
     _rank_of,
+    _recommend_seed,
     format_example_block,
     run_canned,
     run_interactive,
+    tune_seeds,
 )
 from aic2026.train.diacritic_noise import NoiseMode
 
@@ -227,62 +230,57 @@ def _make_examples(targets: list[str]) -> list[CannedExample]:
     ]
 
 
-def test_run_canned_tallies_wins_ties_losses_AC1() -> None:
-    """Construct three examples and three retrievers with controlled rankings:
+def _row_with_gold_rank(n_docs: int, target_idx: int, rank: int) -> np.ndarray:
+    """A score row in which ``target_idx`` lands at exactly ``rank`` (1-indexed).
 
-    * Example 1 ("alpha"): C1 ranks #1, baseline_max #2, baseline_dense #3 -> WIN
-    * Example 2 ("beta"):  C1 #1, baseline_max #1, baseline_dense #2 -> TIE (best baseline rank == C1 rank)
-    * Example 3 ("gamma"): C1 #3, baseline_max #1, baseline_dense #1 -> LOSS
+    Places ``rank - 1`` distractor docs strictly above the gold and the rest
+    strictly below; deterministic and tie-free for the gold position.
     """
-    pool = ["pool_a", "pool_b", "pool_c"]  # noise: not in any canned target list
-    examples = _make_examples(["alpha", "beta", "gamma"])
+    row = np.full(n_docs, 0.10, dtype=np.float32)  # below-gold filler
+    row[target_idx] = 0.50
+    placed = 0
+    for j in range(n_docs):
+        if j == target_idx:
+            continue
+        if placed < rank - 1:
+            row[j] = 0.50 + 0.01 * (placed + 1)  # strictly above gold, distinct
+            placed += 1
+    return row
 
-    # Build docs in advance so we can hand-author the matrices.
-    docs = _build_index(pool, examples)
-    # docs == ["pool_a", "pool_b", "pool_c", "alpha", "beta", "gamma"]
-    n_docs = len(docs)
-    alpha_i, beta_i, gamma_i = docs.index("alpha"), docs.index("beta"), docs.index("gamma")
 
-    def c1_scores(queries, _docs):
-        # rows are queries in order: alpha, beta, gamma
-        mat = np.zeros((len(queries), n_docs), dtype=np.float32)
-        mat[0, alpha_i] = 1.0  # alpha -> alpha #1
-        mat[1, beta_i] = 1.0  # beta -> beta #1
-        mat[2, gamma_i] = 0.2  # gamma -> gamma will be #3
-        # Make two other docs out-rank gamma in row 2 for C1:
-        mat[2, alpha_i] = 0.9
-        mat[2, beta_i] = 0.5
-        return mat
+def test_run_canned_tallies_four_way_AC1() -> None:
+    """Four examples + three retrievers, useful_k=3, hand-authored gold ranks:
 
-    def maxsim_scores(queries, _docs):
-        mat = np.zeros((len(queries), n_docs), dtype=np.float32)
-        # Example 1: max wants beta first then alpha -> alpha is #2
-        mat[0, beta_i] = 1.0
-        mat[0, alpha_i] = 0.5
-        # Example 2: beta #1 -> tie
-        mat[1, beta_i] = 1.0
-        # Example 3: gamma #1 -> C1 loses
-        mat[2, gamma_i] = 1.0
-        return mat
+    * "alpha": C1 #1, baselines #5/#6 -> CLEAN WIN (C1 in top-3, baselines not)
+    * "beta":  C1 #1, baselines #1/#2 -> TIE (best baseline also #1)
+    * "gamma": C1 #5, baselines #8/#9 -> GRACEFUL (none in top-3, C1 closest)
+    * "delta": C1 #6, baselines #2/#3 -> LOSS (C1 worse than best baseline)
+    """
+    pool = [f"pool_{i}" for i in range(6)]
+    examples = _make_examples(["alpha", "beta", "gamma", "delta"])
+    docs = _build_index(pool, examples)  # 6 pool + 4 targets = 10 docs
+    n = len(docs)
+    idx = {t: docs.index(t) for t in ("alpha", "beta", "gamma", "delta")}
 
-    def dense_scores(queries, _docs):
-        mat = np.zeros((len(queries), n_docs), dtype=np.float32)
-        # Example 1: alpha #3 (gamma, beta out-rank)
-        mat[0, gamma_i] = 1.0
-        mat[0, beta_i] = 0.5
-        mat[0, alpha_i] = 0.1
-        # Example 2: beta #2 (alpha out-ranks) -> not the best baseline; max
-        # is the best baseline (#1) and C1 ties it.
-        mat[1, alpha_i] = 1.0
-        mat[1, beta_i] = 0.5
-        # Example 3: gamma #1 -> C1 loses
-        mat[2, gamma_i] = 1.0
-        return mat
+    # Per-retriever desired gold rank per example (order: alpha, beta, gamma, delta).
+    c1_ranks = [1, 1, 5, 6]
+    maxsim_ranks = [5, 1, 8, 2]
+    dense_ranks = [6, 2, 9, 3]
+    order = ["alpha", "beta", "gamma", "delta"]
+
+    def make_fn(rank_list):
+        def fn(queries, _docs):
+            mat = np.zeros((len(queries), n), dtype=np.float32)
+            for i, name in enumerate(order):
+                mat[i] = _row_with_gold_rank(n, idx[name], rank_list[i])
+            return mat
+
+        return fn
 
     retrievers = {
-        "C1": FakeRetriever(c1_scores),
-        "Baseline MaxSim": FakeRetriever(maxsim_scores),
-        "Baseline Dense": FakeRetriever(dense_scores),
+        "C1": FakeRetriever(make_fn(c1_ranks)),
+        "Baseline MaxSim": FakeRetriever(make_fn(maxsim_ranks)),
+        "Baseline Dense": FakeRetriever(make_fn(dense_ranks)),
     }
 
     buf = io.StringIO()
@@ -292,15 +290,19 @@ def test_run_canned_tallies_wins_ties_losses_AC1() -> None:
         examples=examples,
         c1_label="C1",
         top_k=3,
+        useful_k=3,
         stream=buf,
     )
-    assert tally == {"wins": 1, "ties": 1, "losses": 1}
+    assert tally == {"clean_wins": 1, "ties": 1, "graceful": 1, "losses": 1}
 
     out = buf.getvalue()
-    assert "C1 THẮNG" in out
+    assert "C1 THẮNG RÕ" in out
     assert "HÒA" in out
+    assert "C1 TRỤ TỐT HƠN" in out
     assert "C1 THUA" in out
-    assert "[Tổng kết] C1 thắng 1/3  hòa 1/3  thua 1/3" in out
+    assert "thắng rõ 1/4" in out
+    assert "trụ tốt hơn 1/4" in out
+    assert "ngưỡng hữu dụng: top-3" in out
 
 
 def test_run_canned_rejects_wrong_shape_AC1() -> None:
@@ -387,3 +389,95 @@ def test_run_interactive_eof_during_mode_prompt_AC1() -> None:
         stream_in=in_buf,
     )
     assert n == 0
+
+
+# ---- _classify_verdict (honest, useful_k-aware) ----------------------------
+
+
+def test_classify_verdict_clean_win_AC1() -> None:
+    # C1 in top-useful_k, best baseline outside it.
+    ranks = {"C1": 1, "B1": 12, "B2": 14}
+    assert _classify_verdict(ranks, "C1", useful_k=10) == "clean_win"
+
+
+def test_classify_verdict_graceful_AC1() -> None:
+    # Neither in top-useful_k, but C1 ranks the gold far higher: graceful, not win.
+    ranks = {"C1": 50, "B1": 1370, "B2": 1661}
+    assert _classify_verdict(ranks, "C1", useful_k=10) == "graceful"
+
+
+def test_classify_verdict_tie_when_both_useful_AC1() -> None:
+    # Both surface it in top-useful_k -> tie, even though C1 has the better rank.
+    ranks = {"C1": 1, "B1": 3, "B2": 8}
+    assert _classify_verdict(ranks, "C1", useful_k=10) == "tie"
+    # Exact rank equality is also a tie.
+    assert _classify_verdict({"C1": 1, "B1": 1}, "C1", useful_k=10) == "tie"
+
+
+def test_classify_verdict_loss_AC1() -> None:
+    ranks = {"C1": 7, "B1": 2, "B2": 9}
+    assert _classify_verdict(ranks, "C1", useful_k=10) == "loss"
+
+
+def test_classify_verdict_useful_k_boundary_AC1() -> None:
+    # C1 exactly at useful_k counts as useful; baseline one past it does not.
+    assert _classify_verdict({"C1": 10, "B1": 11}, "C1", useful_k=10) == "clean_win"
+    # Both just past the boundary -> graceful.
+    assert _classify_verdict({"C1": 11, "B1": 12}, "C1", useful_k=10) == "graceful"
+
+
+# ---- _recommend_seed --------------------------------------------------------
+
+
+def test_recommend_seed_prefers_clean_win_with_widest_margin_AC1() -> None:
+    # seed 2 and 3 are clean wins (C1 in top-10, baseline out); 3 has wider margin.
+    per_seed = [
+        (0, 1, {"b": 2}),  # tie (both useful)
+        (1, 50, {"b": 1370}),  # graceful
+        (2, 3, {"b": 40}),  # clean win, margin 37
+        (3, 2, {"b": 900}),  # clean win, margin 898  <- best
+    ]
+    assert _recommend_seed(per_seed, useful_k=10) == 3
+
+
+def test_recommend_seed_falls_back_to_graceful_then_best_rank_AC1() -> None:
+    # No clean win; pick the graceful seed with the smallest C1 rank.
+    per_seed = [
+        (0, 80, {"b": 90}),  # graceful
+        (1, 40, {"b": 120}),  # graceful, better C1 rank  <- best
+    ]
+    assert _recommend_seed(per_seed, useful_k=10) == 1
+    # No clean win and no graceful (all ties/losses): smallest C1 rank.
+    per_seed2 = [(0, 1, {"b": 1}), (1, 2, {"b": 1})]
+    assert _recommend_seed(per_seed2, useful_k=10) == 0
+
+
+# ---- tune_seeds -------------------------------------------------------------
+
+
+def test_tune_seeds_structure_and_skips_control_AC1() -> None:
+    """tune_seeds returns a recommended seed per non-control example, in range,
+    skips the clean-sanity control, and prints a recommendation line."""
+    examples = [
+        CannedExample(id="n1", vi_explanation="x", clean_target="alpha", mode=NoiseMode.DROP_ALL),
+        CannedExample(id="n2", vi_explanation="x", clean_target="beta", mode=NoiseMode.MIXED_OCR),
+        CannedExample(id="ctl", vi_explanation="x", clean_target="gamma", mode=None),
+    ]
+
+    buf = io.StringIO()
+    best = tune_seeds(
+        retrievers={
+            "C1": FakeRetriever(lambda q, d: np.zeros((len(q), len(d)))),
+            "B1": FakeRetriever(lambda q, d: np.zeros((len(q), len(d)))),
+        },
+        doc_pool=["p0", "p1", "p2"],
+        examples=examples,
+        c1_label="C1",
+        sweep_n=4,
+        useful_k=10,
+        stream=buf,
+    )
+    assert set(best.keys()) == {"n1", "n2"}  # control skipped
+    assert all(0 <= s < 4 for s in best.values())
+    assert "recommend noise_seed=" in buf.getvalue()
+    assert "[Đề xuất seed]" in buf.getvalue()
