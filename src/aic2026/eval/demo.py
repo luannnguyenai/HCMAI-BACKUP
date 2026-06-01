@@ -138,23 +138,26 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
         ),
         clean_target="Cuộc thi AI Challenge sẽ tổ chức tại Hà Nội vào tháng 7",
         mode=NoiseMode.MIXED_OCR,
+        noise_seed=7,
     ),
     CannedExample(
         id="ex6_mixed_ocr_gold_price",
-        vi_explanation=("Nhiễu OCR trên câu tin tức có số liệu (75 → Ts) — cả chữ lẫn số đều hỏng"),
+        vi_explanation=(
+            "Nhiễu OCR trên câu tin tức có số liệu (75 → 7 S) — cả chữ lẫn số đều hỏng"
+        ),
         clean_target="Giá vàng trong nước tăng lên 75 triệu đồng một lượng",
         mode=NoiseMode.MIXED_OCR,
-        noise_seed=5,
+        noise_seed=0,
     ),
     CannedExample(
         id="ex7_mixed_ocr_lifelog",
         vi_explanation=(
             "Nhiễu OCR trên câu mô tả cảnh (truy vấn lifelog điển hình) — "
-            "địa danh 'Long Biên' bị phá thành 'L0nq 8ieh'"
+            "địa danh 'Long Biên' bị phá thành 'Lohq 8ich'"
         ),
         clean_target="Người phụ nữ mặc áo dài trắng đi trên cầu Long Biên",
         mode=NoiseMode.MIXED_OCR,
-        noise_seed=5,
+        noise_seed=7,
     ),
     CannedExample(
         id="ex8_mixed_ocr_stadium",
@@ -163,15 +166,16 @@ CANNED_EXAMPLES: tuple[CannedExample, ...] = (
         ),
         clean_target="Sân vận động quốc gia Mỹ Đình nằm ở quận Nam Từ Liêm",
         mode=NoiseMode.MIXED_OCR,
-        noise_seed=2,
+        noise_seed=6,
     ),
     CannedExample(
         id="ex9_mixed_ocr_flight",
         vi_explanation=(
-            "Nhiễu OCR trên mã chuyến bay (1546 → IsAG) — mã chữ-số là trường hợp tệ nhất cho OCR"
+            "Nhiễu OCR trên mã chuyến bay (1546 → l s 4 6) — mã chữ-số là trường hợp tệ nhất cho OCR"
         ),
         clean_target="Chuyến bay VN 1546 khởi hành lúc 8 giờ sáng tại Tân Sơn Nhất",
         mode=NoiseMode.MIXED_OCR,
+        noise_seed=13,
     ),
     # --- Control (no noise) — keep last --------------------------------------
     CannedExample(
