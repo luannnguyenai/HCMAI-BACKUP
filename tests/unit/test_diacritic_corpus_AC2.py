@@ -25,29 +25,41 @@ def test_build_corpus_from_clean_strings_AC2(tmp_path: Path) -> None:
         "Đà Nẵng biển xanh cát trắng",
     ]
     out = tmp_path / "pairs.parquet"
-    res = build_corpus(out=out, k=4, hard_negatives=7, seed=0, clean_strings=clean)
+    # Default k = len(NoiseMode) -> one variant per noise mode per anchor.
+    res = build_corpus(out=out, hard_negatives=7, seed=0, clean_strings=clean)
 
+    n_modes = len(list(NoiseMode))
     assert out.exists()
     assert res.n_clean == 3  # dup + short removed
-    assert res.n_pairs == 3 * 4
+    assert res.n_pairs == 3 * n_modes
     assert res.sources_used == ["<clean_strings>"]
     assert res.sources_skipped == []
 
     rows = read_pairs(out)
-    assert len(rows) == 12
+    assert len(rows) == 3 * n_modes
     assert set(rows[0].keys()) == {"anchor_clean", "positive_noisy", "mode", "hard_negs"}
 
-    # Exactly 4 positives per anchor, cycling the four modes.
+    # Exactly one variant per anchor per mode, all modes represented.
     from collections import Counter
 
     per_anchor = Counter(r["anchor_clean"] for r in rows)
-    assert set(per_anchor.values()) == {4}
+    assert set(per_anchor.values()) == {n_modes}
     assert {r["mode"] for r in rows} == {m.value for m in NoiseMode}
 
     # Hard negatives are other corpus strings, never the anchor itself.
     for r in rows:
         assert isinstance(r["hard_negs"], list)
         assert r["anchor_clean"] not in r["hard_negs"]
+
+
+def test_build_corpus_explicit_k_truncates_cycle_AC2(tmp_path: Path) -> None:
+    """An explicit k smaller than len(NoiseMode) cycles only the first k modes."""
+    clean = ["Hà Nội mùa thu lá vàng", "phở bò tái nạm gầu nóng"]
+    out = tmp_path / "pairs.parquet"
+    res = build_corpus(out=out, k=4, hard_negatives=3, seed=0, clean_strings=clean)
+    assert res.n_pairs == 2 * 4
+    rows = read_pairs(out)
+    assert {r["mode"] for r in rows} == {m.value for m in list(NoiseMode)[:4]}
 
 
 def test_build_corpus_skips_failing_source_AC2(

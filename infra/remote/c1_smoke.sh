@@ -27,8 +27,12 @@ if [ -f /tmp/c1/pairs.parquet ]; then
   echo "== c1-corpus (cached: /tmp/c1/pairs.parquet already exists) =="
 else
   echo "== c1-corpus =="
-  uv run train c1-corpus --out /tmp/c1/pairs.parquet --max-per-source 5000 \
-    || { echo "corpus FAILED"; exit 1; }
+  # Same at-exit GIL/tokenizers race as c1-fit: the corpus prints `OK ...` and
+  # writes the parquet, then non-zero-exits during interpreter cleanup. Trust
+  # the parquet file's existence, not the exit code.
+  uv run train c1-corpus --out /tmp/c1/pairs.parquet --max-per-source 5000 || true
+  echo "== c1-corpus parquet check =="
+  ls -la /tmp/c1/pairs.parquet 2>/dev/null || { echo "corpus FAILED (no parquet)"; exit 1; }
 fi
 
 echo "== c1-fit =="
