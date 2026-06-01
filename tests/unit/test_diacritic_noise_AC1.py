@@ -159,3 +159,90 @@ def test_mixed_ocr_applies_drop_split_and_confuse_AC1() -> None:
     assert changed, (
         "MIXED_OCR should change Vietnamese strings with confusables on at least one seed"
     )
+
+
+# --- v3 Tier A modes (WORD_MERGE / HOMOPHONE_SWAP / CASE_NOISE) -------------
+
+
+def test_word_merge_drops_spaces_with_p1_AC1() -> None:
+    """WORD_MERGE with p=1 removes every inter-word space; p=0 is identity."""
+    from aic2026.train.diacritic_noise import word_merge
+
+    # p=1 -> every gap collapses; the words concatenate with no spaces.
+    assert word_merge("a b c", p=1.0, rng=random.Random(0)) == "abc"
+    assert word_merge("quả táo Hà Nội", p=1.0, rng=random.Random(0)) == "quảtáoHàNội"
+    # p=0 -> identity.
+    assert word_merge("quả táo Hà Nội", p=0.0, rng=random.Random(0)) == "quả táo Hà Nội"
+    # Empty / single-word inputs pass through.
+    assert word_merge("", p=1.0, rng=random.Random(0)) == ""
+    assert word_merge("solo", p=1.0, rng=random.Random(0)) == "solo"
+
+
+def test_case_noise_changes_case_AC1() -> None:
+    """CASE_NOISE at p=1 changes case on every word (excluding identity transforms)."""
+    from aic2026.train.diacritic_noise import case_noise
+
+    # p=1 + a seeded RNG: at least one word must change.
+    text = "Hà Nội mùa thu lá vàng"
+    out = case_noise(text, p=1.0, rng=random.Random(0))
+    assert out != text
+    # ASCII works too.
+    assert case_noise("hello world", p=1.0, rng=random.Random(0)) != "hello world"
+    # p=0 -> identity.
+    assert case_noise(text, p=0.0, rng=random.Random(0)) == text
+
+
+def test_homophone_swap_can_add_tone_to_level_syllable_AC1() -> None:
+    """HOMOPHONE_SWAP can add a tone to a level (untoned) syllable.
+
+    This is the CORE distinction from ``tone_swap``: tone_swap is mark-anchored
+    (only fires on existing tone marks), so ``ma`` (no tone) cannot become
+    ``má``/``mã``/etc. through it. HOMOPHONE_SWAP is vowel-anchored and reaches
+    the full homophone family. The test asserts that across multiple seeds, at
+    least one toned variant of ``ma`` is produced.
+    """
+    from aic2026.train.diacritic_noise import homophone_swap
+
+    toned_variants = {"\u00e0", "\u00e1", "\u00e3", "\u1ea3", "\u1ea1"}  # à á ã ả ạ
+    saw_toned = False
+    for s in range(50):
+        out = homophone_swap("ma", p=1.0, rng=random.Random(f"seed{s}"))
+        # Output is exactly one syllable; check if char[1] is a toned variant of 'a'.
+        if any(t in out for t in toned_variants):
+            saw_toned = True
+            break
+    assert saw_toned, "homophone_swap on 'ma' must occasionally produce a toned variant"
+
+
+def test_homophone_swap_can_remove_existing_tone_AC1() -> None:
+    """HOMOPHONE_SWAP can also strip an existing tone (chợ -> chơ across seeds).
+
+    Note: horn / breve / circumflex are BASE-vowel modifiers (part of the vowel
+    identity ơ vs o), not tones. homophone_swap preserves them and only re-tones,
+    so ``chợ`` (cơ + dot-below) -> ``chơ`` (cơ + no tone) when the chosen new
+    tone is None. ``chợ`` -> ``cho`` would require also stripping the horn,
+    which is a vowel-identity change (covered by ``drop_all`` / ``random_drop``)
+    rather than a tone change. The semantics here are tone-only.
+    """
+    from aic2026.train.diacritic_noise import homophone_swap
+
+    saw_untoned = False
+    for s in range(50):
+        out = homophone_swap("chợ", p=1.0, rng=random.Random(f"seed{s}"))
+        if out == "chơ":
+            saw_untoned = True
+            break
+    assert saw_untoned, "homophone_swap on 'chợ' must occasionally strip the tone -> 'chơ'"
+
+
+def test_homophone_swap_passes_through_consonants_and_emoji_AC1() -> None:
+    """Non-vowel characters and emoji/CJK pass through untouched."""
+    from aic2026.train.diacritic_noise import homophone_swap
+
+    # All-consonant string: no vowels -> identity even at p=1.
+    assert homophone_swap("bcdfgh", p=1.0, rng=random.Random(0)) == "bcdfgh"
+    # Emoji + CJK: vowels in there might mutate, but emoji/CJK must survive.
+    out = homophone_swap("🙂🔥 漢字", p=1.0, rng=random.Random(0))
+    assert "🙂" in out and "🔥" in out and "漢" in out and "字" in out
+    # p=0 -> identity for any input.
+    assert homophone_swap("chợ Hà Nội ma", p=0.0, rng=random.Random(0)) == "chợ Hà Nội ma"
