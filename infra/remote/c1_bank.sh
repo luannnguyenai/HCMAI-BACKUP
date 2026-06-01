@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Bank the trained C1 artifacts (SPEC-0014) to R2 before the lease is reclaimed.
 #   scp infra/remote/c1_bank.sh aic2026-gpu:c1_bank.sh
-#   ssh aic2026-gpu 'bash c1_bank.sh'
+#   ssh aic2026-gpu 'bash c1_bank.sh [tag] [sha7]'
 # Uploads /tmp/c1 (pairs.parquet + run/head.pt + run/train_meta.json) to
-# s3://$R2_BUCKET/c1-baseline/<sha>/ via R2Client (endpoint-guarded + checksum-
-# compatible, so it works regardless of which .env.remote endpoint is sourced).
+# s3://$R2_BUCKET/c1-baseline/<sha>[-<tag>]/ via R2Client (endpoint-guarded +
+# checksum-compatible, so it works regardless of which .env.remote endpoint is
+# sourced). Pass an optional `tag` to bank multiple variants side-by-side
+# without overwriting (e.g. v2-ocr for the OCR-noise retrain).
 
-SHA7="${1:-7f18c88}"
+TAG="${1:-}"
+SHA7="${2:-7f18c88}"
 DIR="$HOME/aic2026/$SHA7"
+PREFIX="c1-baseline/${SHA7}${TAG:+-$TAG}"
 export PATH="$HOME/.local/bin:$PATH"
 
 # .env.remote is gitignored (not in the code archive). Find any copy for creds;
@@ -25,16 +29,16 @@ set -a; . "$ENVFILE" 2>/dev/null || true; set +a
 echo "== train_meta.json (the result) =="
 cat /tmp/c1/run/train_meta.json 2>/dev/null || { echo "(no train_meta.json)"; exit 1; }
 
-echo "== banking /tmp/c1 -> R2 c1-baseline/$SHA7/ via R2Client =="
+echo "== banking /tmp/c1 -> R2 $PREFIX/ via R2Client =="
 cd "$DIR" || exit 1
-uv run python - "$SHA7" <<'PY'
+uv run python - "$PREFIX" <<'PY'
 import sys
 from pathlib import Path
 from aic2026.remote.r2 import R2Client
 
-sha = sys.argv[1]
+prefix = sys.argv[1]
 client = R2Client()
-keys = client.upload_dir(Path("/tmp/c1"), f"c1-baseline/{sha}")
+keys = client.upload_dir(Path("/tmp/c1"), prefix)
 print(f"uploaded {len(keys)} objects:")
 for k in keys:
     print("  ", k)
