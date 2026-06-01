@@ -1,13 +1,15 @@
-# Implements SPEC-0014 section 3 (CLI surface).
-"""`bin/train` - C1 DiacriticBERT corpus build, head training, robustness eval.
+# Implements SPEC-0014 section 3 (CLI surface) + SS 6 (live demo).
+"""`bin/train` - C1 DiacriticBERT corpus build, head training, robustness eval, demo.
 
 Subcommands:
   - ``c1-corpus``: harvest public Vietnamese text -> noisy pairs Parquet.
   - ``c1-fit``:    train the projection head over frozen BGE-M3.
   - ``c1-eval``:   degradation@k sweep over a queries file.
+  - ``c1-demo``:   live side-by-side demo (canned + interactive REPL).
 
-The corpus + training steps need the ``train`` extra (`uv sync --extra train`);
-heavy imports are deferred into each command so `--help` works without them.
+The corpus + training + demo steps need the ``train`` extra
+(`uv sync --extra train`); heavy imports are deferred into each command so
+`--help` works without them.
 """
 
 from __future__ import annotations
@@ -227,6 +229,106 @@ def c1_eval(
 
         out.write_text(json.dumps(result, indent=2), encoding="utf-8")
         typer.echo(f"wrote {out}")
+    raise typer.Exit(EXIT_OK)
+
+
+@app.command("c1-demo")
+def c1_demo(
+    checkpoint: Annotated[
+        Path,
+        typer.Option(
+            "--checkpoint",
+            help="Path to head.pt (the trained C1 head). Required.",
+            exists=True,
+        ),
+    ],
+    pairs: Annotated[
+        Path,
+        typer.Option(
+            "--pairs",
+            help="Training Parquet to exclude anchors from when sampling demo docs.",
+            exists=True,
+        ),
+    ],
+    mode: Annotated[
+        str,
+        typer.Option(
+            "--mode",
+            help="One of: canned, interactive, both.",
+        ),
+    ] = "canned",
+    n_docs: Annotated[
+        int,
+        typer.Option(
+            "--n-docs",
+            help="Held-out Vietnamese docs to index (disjoint from --pairs).",
+            min=10,
+        ),
+    ] = 300,
+    backbone: Annotated[str, typer.Option("--backbone")] = "BAAI/bge-m3",
+    top_k: Annotated[int, typer.Option("--top-k", min=1)] = 3,
+    seed: Annotated[int, typer.Option("--seed")] = 0,
+) -> None:
+    """Run a live C1 ship-gate demo.
+
+    ``canned`` (default) prints a fixed set of Vietnamese examples that
+    exercise the failure modes C1 was trained to survive (drop_all, char_confuse,
+    mixed_ocr, word_merge, clean sanity), with a win/tie/loss tally vs
+    raw-MaxSim + dense baselines.
+
+    ``interactive`` drops into a REPL: the audience types a query + optional
+    noise mode and sees the same side-by-side block.
+
+    ``both`` runs canned first, then interactive.
+    """
+    _configure_logging()
+    mode_norm = mode.strip().lower()
+    if mode_norm not in {"canned", "interactive", "both"}:
+        raise typer.BadParameter(
+            f"--mode must be one of canned/interactive/both; got {mode!r}"
+        )
+
+    from aic2026.eval.demo import (
+        C1_LABEL_DEFAULT,
+        CANNED_EXAMPLES,
+        run_canned,
+        run_interactive,
+    )
+    from aic2026.eval.diacritic_robustness import build_heldout_queries
+    from aic2026.eval.retrievers import (
+        BgeM3DenseEmbedder,
+        DenseRetriever,
+        MaxSimRetriever,
+        load_head,
+    )
+    from aic2026.train.diacritic_bert import BgeM3Backbone
+
+    typer.echo(f"loading backbone: {backbone}")
+    bb = BgeM3Backbone(backbone)
+    typer.echo(f"loading head: {checkpoint}")
+    head = load_head(checkpoint)
+
+    typer.echo(f"sampling {n_docs} held-out docs (excluding training anchors)")
+    doc_pool = build_heldout_queries(n_docs, exclude_corpus=pairs, seed=seed)
+
+    c1_label = C1_LABEL_DEFAULT
+    retrievers = {
+        c1_label: MaxSimRetriever(bb, head=head),
+        "Baseline MaxSim (BGE-M3 thô)": MaxSimRetriever(bb, head=None),
+        "Baseline Dense (BGE-M3 vector trung bình)": DenseRetriever(BgeM3DenseEmbedder(bb)),
+    }
+
+    if mode_norm in ("canned", "both"):
+        typer.echo(f"== canned showcase ({len(CANNED_EXAMPLES)} examples) ==")
+        run_canned(
+            retrievers=retrievers,
+            doc_pool=doc_pool,
+            c1_label=c1_label,
+            top_k=top_k,
+        )
+    if mode_norm in ("interactive", "both"):
+        run_interactive(retrievers=retrievers, doc_pool=doc_pool, top_k=max(top_k, 5))
+
     raise typer.Exit(EXIT_OK)
 
 
