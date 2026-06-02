@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import logging
 import random
 import statistics
 import unicodedata
@@ -34,6 +35,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from aic2026.train.diacritic_noise import NoiseMode, noise
+
+logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -206,12 +209,14 @@ def compare(
 def load_strings(path: Path) -> list[str]:
     """Load query/OCR strings from a file or directory.
 
-    Handles ``.txt``/``.tsv``/``.csv`` (one string per non-empty line) and
-    ``.json``/``.jsonl`` (string leaves of length >= 4). A directory is walked
-    for any of those extensions. Best-effort and defensive - unknown formats
-    yield ``[]`` rather than raising.
+    Handles ``.txt``/``.tsv``/``.csv`` (one string per non-empty line),
+    ``.json``/``.jsonl`` (string leaves of length >= 4), and ``.xlsx``/``.xls``
+    (string cell values of length >= 4, read via an optional ``openpyxl``
+    import). A directory is walked for any of those extensions. Best-effort and
+    defensive - unknown formats yield ``[]`` rather than raising, and
+    spreadsheets are skipped with a logged warning when ``openpyxl`` is absent.
     """
-    exts = {".txt", ".tsv", ".csv", ".json", ".jsonl"}
+    exts = {".txt", ".tsv", ".csv", ".json", ".jsonl", ".xlsx", ".xls"}
     files = (
         [p for p in sorted(path.rglob("*")) if p.suffix.lower() in exts]
         if path.is_dir()
@@ -219,12 +224,16 @@ def load_strings(path: Path) -> list[str]:
     )
     out: list[str] = []
     for p in files:
+        suffix = p.suffix.lower()
+        if suffix in (".xlsx", ".xls"):
+            out.extend(_xlsx_strings(p))
+            continue
         try:
             raw = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if p.suffix.lower() in (".json", ".jsonl"):
-            chunks = raw.splitlines() if p.suffix.lower() == ".jsonl" else [raw]
+        if suffix in (".json", ".jsonl"):
+            chunks = raw.splitlines() if suffix == ".jsonl" else [raw]
             for chunk in chunks:
                 chunk = chunk.strip()
                 if not chunk:
@@ -236,6 +245,40 @@ def load_strings(path: Path) -> list[str]:
         else:
             out.extend(ln.strip() for ln in raw.splitlines() if ln.strip())
     return out
+
+
+def _xlsx_strings(path: Path) -> list[str]:
+    """Collect string cell values (stripped, len >= 4) from every worksheet.
+
+    ``openpyxl`` is imported lazily inside this branch so the module keeps
+    importing on CPU/CI without the dependency. If it is unavailable the
+    spreadsheet is skipped with a logged warning (best-effort contract), and a
+    corrupt/legacy file that ``openpyxl`` cannot open is likewise skipped.
+    """
+    try:
+        import openpyxl
+    except ImportError:
+        logger.warning(
+            "openpyxl not installed; skipping spreadsheet %s "
+            "(install openpyxl, e.g. run `uv run --with openpyxl ...`)",
+            path,
+        )
+        return []
+    try:
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    except Exception as exc:
+        logger.warning("could not read spreadsheet %s: %s", path, exc)
+        return []
+    found: list[str] = []
+    for ws in wb.worksheets:
+        for row in ws.iter_rows(values_only=True):
+            for value in row:
+                if isinstance(value, str):
+                    text = value.strip()
+                    if len(text) >= 4:
+                        found.append(text)
+    wb.close()
+    return found
 
 
 def _json_strings(obj: object) -> list[str]:

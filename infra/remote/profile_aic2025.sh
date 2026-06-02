@@ -49,7 +49,7 @@ done
 
 echo "== profiling =="
 # pillow is optional in the .py; --with enables the resolution histogram.
-uv run --with pillow python profile_aic2025.py --root "$ROOT" --out "$ROOT/profile.json"
+uv run --with pillow --with openpyxl python profile_aic2025.py --root "$ROOT" --out "$ROOT/profile.json"
 rc=$?
 echo "== profile exit code: $rc =="
 exit $rc

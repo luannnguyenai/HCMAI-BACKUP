@@ -107,3 +107,29 @@ def test_load_strings_txt_and_json_AC1(tmp_path) -> None:
 
     # Directory walk picks up both.
     assert len(load_strings(tmp_path)) >= 4
+
+
+def test_load_strings_xlsx_AC1(tmp_path) -> None:
+    openpyxl = pytest.importorskip("openpyxl")
+
+    xlsx = tmp_path / "DanhSachTruyVanAIC_Chungket.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["A1"] = "Người đàn ông mặc áo xanh đi xe đạp qua cầu Long Biên"
+    ws["A2"] = "Cô gái cầm ô vàng đứng trước cửa hàng tạp hóa"
+    ws["A3"] = "abc"  # short string (<4 chars) -> dropped by the length filter
+    ws["A4"] = 12345  # numeric cell -> skipped (would be "12345" if not skipped)
+    wb.save(xlsx)
+
+    loaded = load_strings(xlsx)
+    assert "Người đàn ông mặc áo xanh đi xe đạp qua cầu Long Biên" in loaded
+    assert "Cô gái cầm ô vàng đứng trước cửa hàng tạp hóa" in loaded
+    # Short string and numeric cell are filtered out.
+    assert "abc" not in loaded
+    assert "12345" not in loaded
+    assert all(isinstance(s, str) for s in loaded)
+
+    # A directory containing the spreadsheet is walked correctly.
+    dir_loaded = load_strings(tmp_path)
+    assert "Người đàn ông mặc áo xanh đi xe đạp qua cầu Long Biên" in dir_loaded
+    assert "Cô gái cầm ô vàng đứng trước cửa hàng tạp hóa" in dir_loaded

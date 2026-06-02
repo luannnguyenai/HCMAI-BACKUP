@@ -33,6 +33,7 @@ import re
 import shutil
 import statistics
 import subprocess
+import sys
 import unicodedata
 from collections import Counter
 from pathlib import Path
@@ -40,7 +41,7 @@ from typing import Any
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
-TEXT_EXTS = {".txt", ".csv", ".json", ".jsonl", ".tsv"}
+TEXT_EXTS = {".txt", ".csv", ".json", ".jsonl", ".tsv", ".xlsx", ".xls"}
 
 # A keyframe path usually looks like ".../L25/V001/123.jpg" or ".../L25_V001_123.jpg".
 # We infer the collection token (L\d+) and a per-frame index to sanity-check density.
@@ -133,12 +134,15 @@ def profile_keyframes(root: Path, sample_images: int) -> dict[str, Any]:
 
 def _load_text_lines(p: Path) -> list[str]:
     """Best-effort load of query-like text. Handles .txt/.tsv/.csv (per-line),
-    and .json/.jsonl (extract string leaves heuristically)."""
+    .json/.jsonl (extract string leaves heuristically), and .xlsx/.xls (string
+    cell values via an optional openpyxl import; skipped if openpyxl absent)."""
+    suffix = p.suffix.lower()
+    if suffix in (".xlsx", ".xls"):
+        return _xlsx_strings(p)
     try:
         raw = p.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return []
-    suffix = p.suffix.lower()
     if suffix in (".json", ".jsonl"):
         out: list[str] = []
         for chunk in raw.splitlines() if suffix == ".jsonl" else [raw]:
@@ -152,6 +156,38 @@ def _load_text_lines(p: Path) -> list[str]:
             out.extend(_json_strings(obj))
         return out
     return [ln.strip() for ln in raw.splitlines() if ln.strip()]
+
+
+def _xlsx_strings(p: Path) -> list[str]:
+    """Collect string cell values (stripped, len >= 4) from every worksheet.
+
+    openpyxl is imported lazily so the profiler stays dependency-light; if it is
+    unavailable (or the file cannot be opened) the spreadsheet is skipped with a
+    stderr note rather than crashing."""
+    try:
+        import openpyxl
+    except ImportError:
+        print(
+            f"  (openpyxl not installed; skipping spreadsheet {p.name} - "
+            "rerun with `uv run --with openpyxl`)",
+            file=sys.stderr,
+        )
+        return []
+    try:
+        wb = openpyxl.load_workbook(p, read_only=True, data_only=True)
+    except Exception as exc:
+        print(f"  (could not read spreadsheet {p.name}: {exc})", file=sys.stderr)
+        return []
+    found: list[str] = []
+    for ws in wb.worksheets:
+        for row in ws.iter_rows(values_only=True):
+            for value in row:
+                if isinstance(value, str):
+                    text = value.strip()
+                    if len(text) >= 4:
+                        found.append(text)
+    wb.close()
+    return found
 
 
 def _json_strings(obj: Any) -> list[str]:
