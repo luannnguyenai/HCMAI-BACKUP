@@ -17,12 +17,23 @@
 set -u
 URL="${1:-}"
 ROOT="${2:-/tmp/aic2025}"
+
+# Non-interactive ssh (`ssh host 'bash profile_aic2025.sh ...'`) doesn't load the
+# login PATH, so uv (installed at ~/.local/bin) isn't found. Export it explicitly,
+# matching c1_eval.sh / c1_smoke.sh / c1_demo.sh.
+export PATH="$HOME/.local/bin:$PATH"
+if ! command -v uv >/dev/null 2>&1; then
+  echo "ERROR: uv not found on PATH; expected ~/.local/bin/uv" >&2
+  exit 1
+fi
+
 mkdir -p "$ROOT"
 
 if [ -n "$URL" ]; then
   echo "== fetching $URL -> $ROOT =="
-  uv run pip install -q gdown pillow 2>/dev/null || pip install -q gdown pillow
-  uv run gdown --folder "$URL" -O "$ROOT" || gdown --folder "$URL" -O "$ROOT"
+  # `uv run --with` resolves gdown into an ephemeral env (no global pip install,
+  # so no PEP 668 externally-managed-environment failure on the box's system pip).
+  uv run --with gdown gdown --folder "$URL" -O "$ROOT"
 fi
 
 # Unzip any keyframe archives that haven't been expanded yet.
@@ -37,7 +48,8 @@ for z in "$ROOT"/Keyframes_*.zip; do
 done
 
 echo "== profiling =="
-uv run python profile_aic2025.py --root "$ROOT" --out "$ROOT/profile.json"
+# pillow is optional in the .py; --with enables the resolution histogram.
+uv run --with pillow python profile_aic2025.py --root "$ROOT" --out "$ROOT/profile.json"
 rc=$?
 echo "== profile exit code: $rc =="
 exit $rc
