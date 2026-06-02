@@ -62,6 +62,26 @@ The finals `query/DanhSachTruyVanAIC_Chungket.xlsx` has columns **`Query Name | 
 1. **The query is clean human Vietnamese; the noise is on the *index* side** (OCR text from keyframes, ASR transcripts). So C1's real job is *clean-query → noisy-indexed-text* matching. The Q2 calibration that matters most is **synthetic noise vs real OCR/ASR output** (still blocked on keyframes), more than query-distribution matching.
 2. **Our C1 anchors (Wikipedia sentences) and demo examples (short phrases) under-represent length.** Real targets are paragraph-scale. This corroborates the v3 eval finding that single-syllable noise modes saturate — at paragraph length they matter even less. Consider longer, multi-sentence anchors for a more representative corpus + demo.
 
+## 4.2 C1 noise calibration (real OCR vs synthetic; 2026-06-02)
+
+`ocr_sample.py` ran EasyOCR (`vi`) over 1000 sampled keyframes (916 had text) → `bin/train c1-calibrate` compared surface stats. Per-string means:
+
+| Source | char_len | diacritic | digit | uppercase | single-char-token (frag) |
+|---|---:|---:|---:|---:|---:|
+| Clean anchor (Wikipedia, n=5000) | 82 | 0.29 | 0.018 | 0.04 | 0.03 |
+| **Real OCR** (EasyOCR, n=916) | 115 | **0.062** | 0.046 | **0.404** | **0.084** |
+| Our `mixed_ocr` (synthetic) | 94 | 0.23 | 0.032 | 0.04 | **0.52** |
+| Real query (xlsx, n=81) | 291 | 0.099* | 0.073 | 0.032 | 0.018 |
+
+**Findings (mixed_ocr is mis-calibrated on 3 axes vs real OCR):**
+1. **Diacritic drop too mild** — real OCR strips ~80% of diacritic density (0.29 → **0.062**); our `mixed_ocr` only reaches 0.23. Real Vietnamese OCR is *far* more diacritic-stripped than we model — strong empirical support for C1's premise, and a signal to drop harder.
+2. **Uppercase under-modelled** — real scene/TV OCR is **40% uppercase**; our `mixed_ocr` is 4%. `case_noise` (0.21) is closer but still half. Casing noise is real and should be heavier + folded into `mixed_ocr`.
+3. **Over-fragmentation** — our `space_split`/`mixed_ocr` single-char-token ratio is **0.52** vs real OCR **0.084**. We over-split; real OCR keeps words intact at the token level.
+
+**v4 mixed_ocr direction:** raise diacritic-drop weight, fold in heavier `case_noise`, cut `space_split` probability.
+
+**Caveats:** (a) EasyOCR was used because PaddleOCR PP-OCRv5 hit a PaddlePaddle CPU PIR-executor bug on the box (`ConvertPirAttribute2RuntimeAttribute`/onednn) on every frame; EasyOCR box-joins recognized text, so its low fragmentation (0.084) is partly an engine artifact — re-measure with PP-OCRv5 (our planned engine) before finalizing the space_split retune. (b) *The real-query diacritic 0.099 is diluted by the xlsx's English `Trans` column + query IDs (a column-aware extract would isolate the Vietnamese `Description`); pure-Vietnamese query diacritic density is ~0.29.
+
 ## 5. Caveats
 
 - **Profiled (2026-06-02, on box).** §1.1, §4, §4.1, §6 are confirmed: query set, provided assets, **and the keyframes** (121,457 frames L25–L30, 1280×720) are all real and measured. Remaining gaps are deliberate deferrals: the raw videos (only partial L21–L25 landed) and the un-fetched collections (L01–L24, K-series) — not needed for the immediate profiling / calibration / encoder-bench work.
