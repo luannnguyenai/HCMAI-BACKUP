@@ -88,7 +88,7 @@ We can use the organisers' object-detection labels as structured filter input (p
 
 These add to (not replace) the existing open questions:
 
-- **Q-DS-1**: What model did the organisers use for the pre-computed CLIP embeddings? (need to know the dimensionality, the metric, and any normalisation conventions)
+- **Q-DS-1**: What model did the organisers use for the pre-computed CLIP embeddings? (need to know the dimensionality, the metric, and any normalisation conventions) **(2026-06-02: RESOLVED for the AIC2025 proxy ó the provided file is `clip-features-32` = CLIP ViT-B/32, 512-d, 2021-era; weak as expected. See [research-note 07](07-aic2025-proxy-corpus.md) ß4. AIC2026's may differ; re-confirm on the June-25 drop.)**
 - **Q-DS-2**: What object-detection schema is provided? COCO 80 classes? Open-vocabulary? Custom?
 - **Q-DS-3**: How dense is the keyframe sampling - one per second? One per shot? Uniform N per video? **(2026-06-02: now answerable on last-year data ù the AIC2025 proxy corpus ([research-note 07](07-aic2025-proxy-corpus.md)) ships pre-extracted keyframes; run [`infra/remote/profile_aic2025.py`](../../infra/remote/profile_aic2025.py) for per-collection counts + naming scheme.)**
 - **Q-DS-4**: Are the YouTube videos all still available in 2026, or have any been taken down? Audit early.

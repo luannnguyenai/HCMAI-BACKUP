@@ -16,6 +16,22 @@ Source: Google Drive folder shared 2026-06-02 — <https://drive.google.com/driv
 
 **Collection naming.** AIC groups videos into collections `L01, L02, …`. This folder shows only **L25–L30** (L26 split into `c/d/e`) — almost certainly the **tail subset** of the full corpus, not all of it. The full keyframe set (L01–L30+) is likely larger or in sibling folders. Mixed modified-dates (Oct 2024 / Aug 2025 / May 2026) suggest the folder aggregates assets across editions.
 
+## 1.1 Actual structure + fetch status (confirmed on box 2026-06-02)
+
+`gdown --folder` recursed into the subfolders and revealed this is the **full AIC2025 finals dataset**, much richer than the top-level listing. What the recursion exposed (and what landed before a Drive quota stopped the fetch):
+
+| Path | Contents | Fetch status |
+|---|---|---|
+| `query/` | `DanhSachTruyVanAIC_Chungket.xlsx` ("AIC Finals Query List") + `query-p{1,2,3}-groupA.zip` | ✅ **landed** (~80 KB) |
+| `video_batch_1/clip-features-32-aic25-b1.zip` | **organizers' CLIP ViT-B/32 features** (the "weak CLIP" of note 06; resolves **Q-DS-1**) | ✅ landed (168 MB) |
+| `video_batch_1/media-info-aic25-b1.zip` | **metadata** (unlocks the yt-dlp transcript lane, note 06 §2.1) | ✅ landed (1.1 MB) |
+| `video_batch_1/objects-aic25-b1.zip` | **object detection** (free OD filter lane, note 06 §2.5) | ✅ landed (640 MB) |
+| `video_batch_1/Videos_L21–L30_*.zip` | raw videos (L-series) | ⚠️ partial — L21–L24 + part of L25, then quota |
+| `video_batch_2/Videos_K01–K20.zip` | raw videos (K-series) | ❌ not reached (quota) |
+| `Keyframes_L25–L30.zip` | **pre-extracted keyframes** (what we most need) | ❌ **not reached (quota)** — they are LAST in gdown's order |
+
+**Drive quota.** The fetch died with *"Too many users have viewed or downloaded this file recently"* after ~22 GB — gdown's well-known failure on large/popular shared folders. The keyframes (last in order) never came. See §6 for the robust re-fetch path.
+
 ## 2. Scale estimate (listing-level; confirm with the profiler)
 
 19.3 GB of JPEG keyframes at a typical competition resolution (~100–200 KB/frame) ≈ **~100k–200k keyframes for L25–L30 alone**. If the full corpus spans L01–L30 at similar density, that is **order-of-magnitude ~1M keyframes** — consistent with the cold-indexing sizing in [research-note 03 §J](03-foundation-models-2026.md) (~50 GPU-hours for 1M frames on an A6000; far less on the H200). **One H200 lease can index the whole thing.**
@@ -31,36 +47,49 @@ We have repeatedly been blocked on "can't validate on real data until June 25." 
 3. **The Qwen3-VL-Embedding bench.** Run the encoder bake-off (Qwen3-VL-Embedding-2B vs the SigLIP-2 / Meta CLIP 2 / InternVideo2 floor) on **real Vietnamese keyframes + real queries**, turning the model-selection debate (per the 2026-06-02 meeting) into a measurement. See the encoder-selection report / forthcoming research note.
 4. **Keyframe-density audit ([note 06](06-aic2026-dataset-shape.md) Q-DS-3).** Are the provided keyframes dense enough, or do we need our own TransNetV2 pass? Answerable now from the per-collection frame counts.
 
-## 4. What's NOT in this folder (vs note 06's expected assets)
+## 4. Provided assets — all present (resolves note 06 expectations)
 
-[Note 06](06-aic2026-dataset-shape.md) expects organizers to also ship **metadata (YouTube URL, description)**, **object detection**, and the **weak CLIP embeddings**. None are visible in this listing — only keyframes + videos + queries. Either they live in sibling folders, or this 2025 drop omitted them. This matters because the **YouTube-URL → yt-dlp transcript** lane (note 06 §2.1) depends on that metadata existing. Confirm during the profiler run / by browsing the Drive.
+[Note 06](06-aic2026-dataset-shape.md) expected organizers to also ship metadata, object detection, and the weak CLIP embeddings. **Confirmed present** in `video_batch_1/` (see §1.1): `clip-features-32` (CLIP **ViT-B/32**, resolving **Q-DS-1** — it is the 512-d 2021-era model, consistent with note 05's finding that the 2025 baseline defaulted to ViT-B/32; weak, as expected), `media-info` (metadata → the **yt-dlp transcript lane**, note 06 §2.1, is viable), and `objects` (OD → free filter lane, note 06 §2.5; schema TBD on unzip, **Q-DS-2**). All three landed before the quota cut-off.
+
+## 4.1 Real query shape (profiled on box 2026-06-02) — important for C1 + the demo
+
+The finals `query/DanhSachTruyVanAIC_Chungket.xlsx` has columns **`Query Name | Description (vi) | Trans (en)`** and query IDs like `tkis-query-01` (**t**extual **KIS**). The profiler parsed 81 cells (incl. headers + the English `Trans` column + IDs — the loader is naive; a column-aware extract is a refinement). Headline:
+
+- **Queries are long paragraph-length descriptions, not short phrases**: char-len mean **291**, median **322**, max **899**; word-len mean **56**, median **62**, max **167**.
+- Example (one `tkis` query, abridged): *"Trong đoạn video, có một nhóm khoảng 4 người… Đây là video giới thiệu về kỷ lục Guiness về làm sợi bún khoai tây dài nhất thế giới"* — multi-sentence, detail-stacked.
+
+**Implications:**
+1. **The query is clean human Vietnamese; the noise is on the *index* side** (OCR text from keyframes, ASR transcripts). So C1's real job is *clean-query → noisy-indexed-text* matching. The Q2 calibration that matters most is **synthetic noise vs real OCR/ASR output** (still blocked on keyframes), more than query-distribution matching.
+2. **Our C1 anchors (Wikipedia sentences) and demo examples (short phrases) under-represent length.** Real targets are paragraph-scale. This corroborates the v3 eval finding that single-syllable noise modes saturate — at paragraph length they matter even less. Consider longer, multi-sentence anchors for a more representative corpus + demo.
 
 ## 5. Caveats
 
-- **Listing, not bytes.** §1–§2 are inferred from the Drive listing + AIC domain knowledge. Frame counts, naming scheme, resolution, and query format are _PENDING-PROFILE_.
+- **Partially profiled.** §1.1, §4, §4.1, §6 are confirmed on the box (2026-06-02): query set + provided assets are real. **Keyframe** counts / naming / resolution remain _PENDING_ — the Drive quota blocked the keyframe zips (see §6 for the re-fetch path). §2's frame-count is still an estimate.
 - **Permission.** [ADR-0010](../adr/ADR-0010-borrow-from-2025-baseline.md) / [`docs/permissions/2025-baseline-reuse.md`](../permissions/2025-baseline-reuse.md) cover borrowing the 2025 *baseline code*. Using the 2025 *dataset* for our dev should get an explicit nod from the organizers or the team member who shared it. **Action: confirm before publishing any results derived from it.**
 
-## 6. Ground truth — _PENDING-PROFILE_
+## 6. Ground truth (profiled 2026-06-02; keyframes still pending the re-fetch)
 
-Run on the box and paste the JSON back here:
+| Field | Value |
+|---|---|
+| Query set format | `.xlsx`, cols `Query Name \| Description (vi) \| Trans (en)`, IDs `tkis-query-NN` |
+| Query rows parsed | 81 cells (incl. headers + English `Trans` + IDs — loader is column-naive) |
+| Query length (chars) | mean **291**, median **322**, max **899** |
+| Query length (words) | mean **56**, median **62**, max **167** |
+| Provided CLIP | **ViT-B/32** (`clip-features-32`), 168 MB — resolves Q-DS-1 |
+| Metadata / OD | `media-info` (1.1 MB) + `objects` (640 MB) present |
+| Total keyframes | **PENDING (Drive quota blocked the keyframe zips)** |
+| Per-collection counts / naming / resolution | PENDING (need keyframes) |
+| Video count / containers | PENDING (only partial L21–L25 landed; not unzipped) |
 
-```bash
-scp infra/remote/profile_aic2025.{sh,py} aic2026-gpu:.
-ssh aic2026-gpu 'bash profile_aic2025.sh "https://drive.google.com/drive/folders/1eO4XpkeF0gq1J5P5-_N4TUMqQ_c9vn4R"'
-# or, if already downloaded: ssh aic2026-gpu 'uv run python profile_aic2025.py --root /tmp/aic2025 --out /tmp/aic2025/profile.json'
-```
+### Re-fetching the keyframes (gdown quota-failed — use a robust path)
 
-| Field | Source | Value |
-|---|---|---|
-| Total keyframes (L25–L30) | profiler `keyframes.total_frames` | _PENDING_ |
-| Per-collection counts | `keyframes.per_collection` | _PENDING_ |
-| Frame naming scheme | `keyframes.sample_paths` | _PENDING_ |
-| Resolution distribution | `keyframes.resolution_hist` | _PENDING_ |
-| Query count | `queries.n_strings` | _PENDING_ |
-| Query format / ext | `queries.ext_hist` | _PENDING_ |
-| Query length (chars/words) | `queries.char_len` / `word_len` | _PENDING_ |
-| Query diacritic density | `queries.vietnamese_diacritic_ratio_mean` | _PENDING_ |
-| Video count / containers | `videos.total_videos` / `ext_hist` | _PENDING_ |
+`gdown --folder` on the whole folder dies with *"Too many users have downloaded recently"* on the large zips. Don't just re-run it. Options, best first:
+
+1. **rclone with the team Google account** (most reliable for quota'd folders): configure a Drive remote once, then `rclone copy "remote:<folder>" /tmp/aic2025 --drive-shared-with-me`. Authenticated transfers don't hit the anonymous-download quota the same way.
+2. **Manual browser download** of just the 8 `Keyframes_L*.zip` (the only thing we still need) → scp to the box. Tedious but unblocked.
+3. **Per-file `gdown` by ID after the quota resets** (hours), fetching only keyframes (IDs captured from the fetch log), e.g. `uv run --with gdown gdown <id> -O /tmp/aic2025/kf/Keyframes_L25.zip`. Still risks re-hitting quota on the big zips.
+
+Once keyframes land: `ssh aic2026-gpu 'bash profile_aic2025.sh "" /tmp/aic2025'` re-profiles in place (skips download, unzips `Keyframes_*`, fills the PENDING rows).
 
 ## 7. References
 
