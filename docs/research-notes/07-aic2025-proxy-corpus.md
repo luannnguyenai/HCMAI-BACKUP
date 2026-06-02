@@ -36,7 +36,7 @@ Source: Google Drive folder shared 2026-06-02 — <https://drive.google.com/driv
 
 19.3 GB of JPEG keyframes at a typical competition resolution (~100–200 KB/frame) ≈ **~100k–200k keyframes for L25–L30 alone**. If the full corpus spans L01–L30 at similar density, that is **order-of-magnitude ~1M keyframes** — consistent with the cold-indexing sizing in [research-note 03 §J](03-foundation-models-2026.md) (~50 GPU-hours for 1M frames on an A6000; far less on the H200). **One H200 lease can index the whole thing.**
 
-> ⚠️ This is an estimate from archive sizes, not a frame count. The profiler reports the real per-collection counts, naming scheme, and resolution histogram.
+> ✅ **Confirmed 2026-06-02** (profiler on box): **121,457 keyframes** for L25–L30 at **1280×720**, mean 170 KB/frame — the estimate held. Full per-collection breakdown + naming in §6.
 
 ## 3. Why this matters — it's our pre-June-25 real-data proxy
 
@@ -64,7 +64,7 @@ The finals `query/DanhSachTruyVanAIC_Chungket.xlsx` has columns **`Query Name | 
 
 ## 5. Caveats
 
-- **Partially profiled.** §1.1, §4, §4.1, §6 are confirmed on the box (2026-06-02): query set + provided assets are real. **Keyframe** counts / naming / resolution remain _PENDING_ — the Drive quota blocked the keyframe zips (see §6 for the re-fetch path). §2's frame-count is still an estimate.
+- **Profiled (2026-06-02, on box).** §1.1, §4, §4.1, §6 are confirmed: query set, provided assets, **and the keyframes** (121,457 frames L25–L30, 1280×720) are all real and measured. Remaining gaps are deliberate deferrals: the raw videos (only partial L21–L25 landed) and the un-fetched collections (L01–L24, K-series) — not needed for the immediate profiling / calibration / encoder-bench work.
 - **Permission.** [ADR-0010](../adr/ADR-0010-borrow-from-2025-baseline.md) / [`docs/permissions/2025-baseline-reuse.md`](../permissions/2025-baseline-reuse.md) cover borrowing the 2025 *baseline code*. Using the 2025 *dataset* for our dev should get an explicit nod from the organizers or the team member who shared it. **Action: confirm before publishing any results derived from it.**
 
 ## 6. Ground truth (profiled 2026-06-02; keyframes still pending the re-fetch)
@@ -77,19 +77,15 @@ The finals `query/DanhSachTruyVanAIC_Chungket.xlsx` has columns **`Query Name | 
 | Query length (words) | mean **56**, median **62**, max **167** |
 | Provided CLIP | **ViT-B/32** (`clip-features-32`), 168 MB — resolves Q-DS-1 |
 | Metadata / OD | `media-info` (1.1 MB) + `objects` (640 MB) present |
-| Total keyframes | **PENDING (Drive quota blocked the keyframe zips)** |
-| Per-collection counts / naming / resolution | PENDING (need keyframes) |
-| Video count / containers | PENDING (only partial L21–L25 landed; not unzipped) |
+| **Total keyframes (L25–L30)** | **121,457** (19.3 GB; mean 170 KB/frame, median 162 KB, range 5.6 KB–615 KB) |
+| **Per-collection counts** | L25 **37,445** · L26 **49,729** · L27 **4,914** · L28 **10,683** · L29 **10,771** · L30 **7,915** |
+| **Frame naming** | `Keyframes_L{NN}/keyframes/L{NN}_V{NNN}/{NNN}.jpg` — per-video subdirs, 3-digit frame index (e.g. `L25_V001/001.jpg`) |
+| **Resolution** | uniform **1280×720** (500/500 sampled) |
+| Video count / containers | partial only (L21–L25 landed earlier, not unzipped); full set deferred |
 
-### Re-fetching the keyframes (gdown quota-failed — use a robust path)
+This **confirms §2's estimate** (predicted ~100–200k for L25–L30 → actual 121,457) and resolves **Q-DS-3** (keyframe density): frames are pre-extracted per video, with collection totals varying widely (L26 ~50k vs L27 ~5k) — i.e. density tracks the number/length of videos per collection, not a fixed N. The frame_id convention for ingestion (SPEC-0003/0006) should be `L{NN}_V{NNN}_{frame}` from the path.
 
-`gdown --folder` on the whole folder dies with *"Too many users have downloaded recently"* on the large zips. Don't just re-run it. Options, best first:
-
-1. **rclone with the team Google account** (most reliable for quota'd folders): configure a Drive remote once, then `rclone copy "remote:<folder>" /tmp/aic2025 --drive-shared-with-me`. Authenticated transfers don't hit the anonymous-download quota the same way.
-2. **Manual browser download** of just the 8 `Keyframes_L*.zip` (the only thing we still need) → scp to the box. Tedious but unblocked.
-3. **Per-file `gdown` by ID after the quota resets** (hours), fetching only keyframes (IDs captured from the fetch log), e.g. `uv run --with gdown gdown <id> -O /tmp/aic2025/kf/Keyframes_L25.zip`. Still risks re-hitting quota on the big zips.
-
-Once keyframes land: `ssh aic2026-gpu 'bash profile_aic2025.sh "" /tmp/aic2025'` re-profiles in place (skips download, unzips `Keyframes_*`, fills the PENDING rows).
+> **How they were fetched (gdown quota lesson).** `gdown --folder` on the whole folder dies with *"Too many users have downloaded recently"* after ~22 GB. The robust path that worked: **rclone with an authenticated Google account** (no anonymous-download quota): install rclone, `rclone authorize "drive"` on a browser machine → token → `rclone config create gdrive drive scope=drive.readonly token='<token>'` on the box, then `rclone copy "gdrive:" /tmp/aic2025 --drive-root-folder-id <FOLDER_ID> --include "Keyframes_*.zip" -P`. Re-profile in place with `bash profile_aic2025.sh "" /tmp/aic2025`.
 
 ## 7. References
 
