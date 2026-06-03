@@ -131,6 +131,7 @@ def _resolve_bench_encoder(
     dtype: str,
     provided_features: Path | None,
     qwen_out_dim: int | None,
+    qwen_impl_src: str | None,
 ) -> Embedder:
     """Construct a bench encoder by name (heavy ones lazy-imported)."""
     name = name.lower()
@@ -147,7 +148,9 @@ def _resolve_bench_encoder(
     if name == "qwen3vl":
         from aic2026.embedding.qwen3vl_embed import Qwen3VLEmbedder
 
-        return Qwen3VLEmbedder(device=device, dtype=dtype, out_dim=qwen_out_dim)
+        return Qwen3VLEmbedder(
+            device=device, dtype=dtype, out_dim=qwen_out_dim, impl_src=qwen_impl_src
+        )
     if name == "provided":
         from aic2026.embedding.provided_clip import ProvidedClipEmbedder
 
@@ -185,6 +188,10 @@ def bench_cmd(
     max_queries: Annotated[int, typer.Option("--max-queries", min=1)] = 20,
     provided_features: Annotated[Path | None, typer.Option("--provided-features")] = None,
     qwen_out_dim: Annotated[int | None, typer.Option("--qwen-out-dim")] = None,
+    qwen_impl_src: Annotated[
+        str | None,
+        typer.Option("--qwen-impl-src", help="Path to the cloned QwenLM/Qwen3-VL-Embedding repo."),
+    ] = None,
     device: Annotated[str, typer.Option("--device")] = "cuda",
     dtype: Annotated[str, typer.Option("--dtype")] = "float16",
     batch_size: Annotated[int, typer.Option("--batch-size", min=1)] = 32,
@@ -207,16 +214,22 @@ def bench_cmd(
     doc_paths = sample_keyframes(kf_root, n_docs, seed=seed)
     typer.echo(f"sampled {len(doc_paths)} keyframes from {kf_root}")
 
-    built = {
-        name: _resolve_bench_encoder(
-            name,
-            device=device,
-            dtype=dtype,
-            provided_features=provided_features,
-            qwen_out_dim=qwen_out_dim,
-        )
-        for name in names
-    }
+    built: dict[str, Embedder] = {}
+    for name in names:
+        try:
+            built[name] = _resolve_bench_encoder(
+                name,
+                device=device,
+                dtype=dtype,
+                provided_features=provided_features,
+                qwen_out_dim=qwen_out_dim,
+                qwen_impl_src=qwen_impl_src,
+            )
+        except Exception as exc:
+            typer.secho(f"WARN: skipping encoder {name!r}: {exc}", err=True, fg=typer.colors.YELLOW)
+    if not built:
+        typer.secho("ERROR: no encoders could be built", err=True, fg=typer.colors.RED)
+        raise typer.Exit(EXIT_USAGE)
 
     deploy = [measure_deployability(enc, query_texts).as_dict() for enc in built.values()]
     (out / "deployability.json").write_text(json.dumps(deploy, indent=2), encoding="utf-8")

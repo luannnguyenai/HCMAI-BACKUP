@@ -21,9 +21,11 @@ from aic2026.embedding.base import l2_normalize
 
 MODEL_ID: str = "metaclip2-worldwide-huge-h14"
 DIM: int = 1024
-# open_clip HF-hub spec; override via the constructor if the registry name
-# differs on the box (verify against the open_clip / HF model card).
-DEFAULT_OPENCLIP_REF: str = "hf-hub:facebook/metaclip-2-worldwide-huge-quickgelu"
+# open_clip registry name + pretrained tag for Meta CLIP 2 worldwide ViT-H/14.
+# Verified present in open_clip 3.3.0 `list_pretrained()` on the H200 box
+# (2026-06-02): ("ViT-H-14-worldwide-quickgelu", "metaclip2_worldwide").
+DEFAULT_MODEL_NAME: str = "ViT-H-14-worldwide-quickgelu"
+DEFAULT_PRETRAINED: str = "metaclip2_worldwide"
 
 _EXTRA_HINT = (
     "Meta CLIP 2 deps are not installed. Install the `embedding` extra: "
@@ -42,7 +44,8 @@ class MetaClip2Embedder:
         *,
         device: str = "cpu",
         dtype: str = "float16",
-        openclip_ref: str = DEFAULT_OPENCLIP_REF,
+        model_name: str = DEFAULT_MODEL_NAME,
+        pretrained: str = DEFAULT_PRETRAINED,
     ) -> None:
         try:
             import open_clip  # type: ignore[import-not-found]
@@ -55,12 +58,14 @@ class MetaClip2Embedder:
         self._device = device
         self._dtype = torch_dtype
 
-        model, _, preprocess = open_clip.create_model_and_transforms(openclip_ref)
+        model, _, preprocess = open_clip.create_model_and_transforms(
+            model_name, pretrained=pretrained
+        )
         model = model.to(device=device, dtype=torch_dtype)
         model.eval()
         self._model = model
         self._preprocess = preprocess
-        self._tokenizer = open_clip.get_tokenizer(openclip_ref)
+        self._tokenizer = open_clip.get_tokenizer(model_name)
 
     def encode_text(self, texts: list[str]) -> np.ndarray:
         if not texts:

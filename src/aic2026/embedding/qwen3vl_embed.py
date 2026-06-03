@@ -1,21 +1,23 @@
 # Implements SPEC-0025 SS 2.1 (Qwen3VLEmbedder).
 """Qwen3-VL-Embedding-2B unified multimodal encoder (2048-d, Apache-2.0).
 
-The bake-off candidate (SPEC-0025): one model maps both Vietnamese query text
-and keyframe images into a single space, with MMEB-V2 SOTA + strong visual-
-document retrieval. Unlike the CLIP-style dual encoders, the *same* model runs
-the query (online) and the keyframe (offline) sides.
+The bake-off candidate (SPEC-0025): one model maps Vietnamese query text and
+keyframe images into a single space (MMEB-V2 SOTA + strong visual-document
+retrieval); the *same* model runs the query (online) and keyframe (offline) sides.
 
-Integration risk (SPEC-0025 SS 9 Q2): the exact `transformers` embedding API
-for Qwen3-VL-Embedding is version-sensitive and uses `trust_remote_code`. The
-model-specific "forward -> pooled embedding" step is isolated in `_embed_*` so
-it is the single place to adjust on the box against the HF model card; the rest
-(L2-norm, MRL truncation, the Embedder protocol) is stable. Heavy deps are
-lazy-imported (CI-safe, `embedding`-extra gated).
+Integration note (SPEC-0025 SS 9 Q2, resolved on the box 2026-06-02): the official
+embedding API is **not** raw ``transformers.AutoModel`` (that loads only the base
+``Qwen3VLModel`` with no embedding head). It is the model's own
+``Qwen3VLEmbedder`` class shipped in the QwenLM/Qwen3-VL-Embedding GitHub repo
+(``src/models/qwen3_vl_embedding.py``), used with instruction-aware, list-of-dict
+inputs and a ``.process()`` method. This wrapper **delegates** to that official
+class (cloned on the box) so we get the correct last-token pooling + instruction
+handling rather than an ad-hoc mean-pool. ``impl_src`` points at the cloned repo.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -25,20 +27,25 @@ from aic2026.embedding.base import l2_normalize
 MODEL_ID: str = "qwen3-vl-embedding-2b"
 HF_REPO: str = "Qwen/Qwen3-VL-Embedding-2B"
 NATIVE_DIM: int = 2048
+# Query-side instruction (asymmetric: queries are instructed, image docs are not),
+# per the official README example.
+DEFAULT_QUERY_INSTRUCTION: str = "Retrieve images or text relevant to the user's query."
 
 _EXTRA_HINT = (
-    "Qwen3-VL-Embedding deps are not installed. Install the `embedding` extra: "
-    "`uv sync --extra embedding` (transformers must be new enough for "
-    "Qwen3-VL-Embedding; see SPEC-0025 SS 7). "
+    "Qwen3-VL-Embedding needs the `embedding` extra AND the official repo cloned: "
+    "`git clone https://github.com/QwenLM/Qwen3-VL-Embedding` and pass its path as "
+    "`impl_src` (SPEC-0025 SS 9 Q2)."
 )
 
 
 class Qwen3VLEmbedder:
-    """Qwen3-VL-Embedding-2B; requires the `embedding` extra + a recent transformers.
+    """Thin wrapper over the official ``Qwen3VLEmbedder.process()`` API.
 
-    ``out_dim`` (Matryoshka) truncates + renormalises to a smaller width; ``None``
-    keeps the native 2048. ``load_in_4bit`` requests a bitsandbytes 4-bit load
-    (for the INT4 deployability measurement, SPEC-0025 SS 4).
+    ``impl_src`` is the path to the cloned QwenLM/Qwen3-VL-Embedding repo (added
+    to ``sys.path`` so ``src.models.qwen3_vl_embedding`` imports). ``out_dim``
+    (Matryoshka) truncates + renormalises; ``None`` keeps the native 2048.
+    ``impl_kwargs`` forwards extra constructor kwargs to the official class for
+    on-box tuning (dtype, min/max pixels, attention impl, ...).
     """
 
     model_id: str = MODEL_ID
@@ -46,97 +53,57 @@ class Qwen3VLEmbedder:
     def __init__(
         self,
         *,
-        device: str = "cpu",
+        device: str = "cuda",
         dtype: str = "float16",
         out_dim: int | None = None,
-        load_in_4bit: bool = False,
-        hf_repo: str = HF_REPO,
+        model_name_or_path: str = HF_REPO,
+        impl_src: str | None = None,
+        query_instruction: str = DEFAULT_QUERY_INSTRUCTION,
+        impl_kwargs: dict[str, object] | None = None,
     ) -> None:
-        try:
-            import torch  # type: ignore[import-not-found]
-            from transformers import AutoModel, AutoProcessor  # type: ignore[import-not-found]
-        except ImportError as exc:  # pragma: no cover - exercised manually
-            raise ImportError(_EXTRA_HINT) from exc
-
         if out_dim is not None and (out_dim <= 0 or out_dim > NATIVE_DIM):
             raise ValueError(f"out_dim must be in 1..{NATIVE_DIM}; got {out_dim}")
-
-        self._torch = torch
-        self._device = device
-        self._dtype = getattr(torch, dtype)
         self.dim = out_dim or NATIVE_DIM
         self._out_dim = out_dim
+        self._device = device
+        self._query_instruction = query_instruction
 
-        load_kwargs: dict[str, object] = {"trust_remote_code": True}
-        if load_in_4bit:
-            from transformers import BitsAndBytesConfig  # type: ignore[import-not-found]
+        if impl_src is not None and impl_src not in sys.path:
+            sys.path.insert(0, impl_src)
+        try:
+            from src.models.qwen3_vl_embedding import (  # type: ignore[import-not-found]
+                Qwen3VLEmbedder as _OfficialEmbedder,
+            )
+        except ImportError as exc:  # pragma: no cover - exercised on the box
+            raise ImportError(_EXTRA_HINT) from exc
 
-            load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
-        else:
-            load_kwargs["torch_dtype"] = self._dtype
-
-        self._processor = AutoProcessor.from_pretrained(hf_repo, trust_remote_code=True)
-        model = AutoModel.from_pretrained(hf_repo, **load_kwargs)
-        if not load_in_4bit:
-            model = model.to(device)
-        model.eval()
-        self._model = model
-
-    # --- model-specific embedding extraction (the spot to adjust on the box) ---
-
-    def _pool(self, outputs: object, attention_mask: object) -> object:
-        """Pool a forward pass to a single vector per item.
-
-        Prefers an explicit embedding the model exposes; else mean-pools the
-        last hidden state over the attention mask. Kept defensive because the
-        Qwen3-VL-Embedding head API is version-sensitive (SPEC-0025 Q2).
-        """
-        emb = getattr(outputs, "embeddings", None)
-        if emb is None:
-            emb = getattr(outputs, "pooler_output", None)
-        if emb is not None:
-            return emb
-        hidden = outputs.last_hidden_state  # (B, T, H)
-        mask = attention_mask.unsqueeze(-1).to(dtype=hidden.dtype)
-        summed = (hidden * mask).sum(dim=1)
-        denom = mask.sum(dim=1).clamp(min=1.0)
-        return summed / denom
-
-    def _finalize(self, emb: object) -> np.ndarray:
-        torch = self._torch
-        arr = emb.detach().to("cpu", dtype=torch.float32).numpy()
-        if self._out_dim is not None:
-            arr = arr[:, : self._out_dim]
-        return l2_normalize(arr)
+        self._impl = _OfficialEmbedder(
+            model_name_or_path=model_name_or_path,
+            **(impl_kwargs or {}),
+        )
 
     # --- Embedder protocol -------------------------------------------------
 
     def encode_text(self, texts: list[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, self.dim), dtype=np.float32)
-        torch = self._torch
-        inputs = self._processor(text=list(texts), padding=True, return_tensors="pt").to(
-            self._device
-        )
-        with torch.inference_mode():
-            outputs = self._model(**inputs)
-        return self._finalize(self._pool(outputs, inputs["attention_mask"]))
+        inputs = [{"instruction": self._query_instruction, "text": t} for t in texts]
+        return self._finalize(self._impl.process(inputs))
 
     def encode_image(self, paths: list[Path]) -> np.ndarray:
         if not paths:
             return np.zeros((0, self.dim), dtype=np.float32)
-        try:
-            from PIL import Image  # type: ignore[import-not-found]
-        except ImportError as exc:  # pragma: no cover
-            raise ImportError(_EXTRA_HINT) from exc
+        inputs = [{"image": str(Path(p))} for p in paths]
+        return self._finalize(self._impl.process(inputs))
 
-        torch = self._torch
-        images = [Image.open(Path(p)).convert("RGB") for p in paths]
-        inputs = self._processor(images=images, return_tensors="pt").to(self._device)
-        with torch.inference_mode():
-            outputs = self._model(**inputs)
-        # Image branch may not carry an attention mask; pass a ones-like fallback.
-        mask = inputs.get("attention_mask")
-        if mask is None:
-            mask = torch.ones(len(images), 1, device=self._device)
-        return self._finalize(self._pool(outputs, mask))
+    def _finalize(self, embeddings: object) -> np.ndarray:
+        """Official ``.process()`` -> (n, native_dim); MRL-truncate + L2-normalise."""
+        arr = embeddings
+        if hasattr(arr, "detach"):  # torch.Tensor
+            arr = arr.detach().to("cpu").float().numpy()
+        arr = np.asarray(arr, dtype=np.float32)
+        if arr.ndim == 1:
+            arr = arr.reshape(1, -1)
+        if self._out_dim is not None:
+            arr = arr[:, : self._out_dim]
+        return l2_normalize(arr)

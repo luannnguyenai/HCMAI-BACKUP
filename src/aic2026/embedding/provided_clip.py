@@ -80,19 +80,30 @@ class ProvidedClipEmbedder:
     def from_dir(cls, features_dir: Path, **kwargs: object) -> ProvidedClipEmbedder:
         """Best-effort load of the provided feature store (SPEC-0025 Q3).
 
-        Layout A: one ``*.npy`` matrix + a row-aligned id list (``*.json`` array,
-        ``*.jsonl`` of {id|frame_id}, or ``*.txt`` one-per-line).
-        Layout B: per-frame ``<id>.npy`` files.
-        Raises with the directory listing if neither matches -- so the real
-        layout is reported and the loader can be adjusted on the box.
+        Searched recursively (the AIC zip nests the .npy under a
+        ``clip-features-32/`` subdir). Three layouts, in order:
+
+        * **A** one ``*.npy`` matrix + a row-aligned id list (``*.json`` array,
+          ``*.jsonl`` of {id|frame_id}, or ``*.txt`` one-per-line).
+        * **C** per-**video** matrices ``<video>.npy`` of shape ``(n_frames, d)``
+          -- the AIC2025 layout (verified on box: ``L25_V011.npy`` -> (318, 512)).
+          Keys are ``f"{video}_{i+1:03d}"`` so row ``i`` aligns with keyframe
+          ``<video>/<i+1:03d>.jpg`` (the organiser keyframes are 1-based 3-digit;
+          assumption recorded in SPEC-0025 Q3).
+        * **B** per-**frame** ``<id>.npy`` single vectors.
+
+        Raises with the listing if none match, so the real layout surfaces.
         """
         features_dir = Path(features_dir)
-        mapping = _load_layout_a(features_dir) or _load_layout_b(features_dir)
+        npys = sorted(features_dir.rglob("*.npy"))
+        mapping = (
+            _load_layout_a(features_dir, npys) or _load_per_video(npys) or _load_layout_b(npys)
+        )
         if mapping is None:
-            listing = ", ".join(p.name for p in sorted(features_dir.iterdir())[:20])
+            listing = ", ".join(p.name for p in npys[:10]) or "(no .npy found)"
             raise ValueError(
                 f"could not parse provided-CLIP features under {features_dir} "
-                f"(tried matrix+ids and per-id .npy). First entries: {listing}"
+                f"(tried matrix+ids, per-video matrices, per-id .npy). Entries: {listing}"
             )
         return cls(mapping, **kwargs)  # type: ignore[arg-type]
 
@@ -143,9 +154,8 @@ class ProvidedClipEmbedder:
         self._text_proc = CLIPProcessor.from_pretrained(TEXT_HF_REPO)
 
 
-def _load_layout_a(features_dir: Path) -> dict[str, np.ndarray] | None:
+def _load_layout_a(features_dir: Path, npys: list[Path]) -> dict[str, np.ndarray] | None:
     """One matrix .npy + a row-aligned id list."""
-    npys = sorted(features_dir.glob("*.npy"))
     if len(npys) != 1:
         return None
     matrix = np.load(npys[0])
@@ -155,6 +165,23 @@ def _load_layout_a(features_dir: Path) -> dict[str, np.ndarray] | None:
     if ids is None or len(ids) != matrix.shape[0]:
         return None
     return {fid: matrix[i] for i, fid in enumerate(ids)}
+
+
+def _load_per_video(npys: list[Path]) -> dict[str, np.ndarray] | None:
+    """Per-video matrices ``<video>.npy`` (n_frames, d) -> keys ``<video>_<NNN>``."""
+    if len(npys) < 2:
+        return None
+    first = np.load(npys[0])
+    if first.ndim != 2 or first.shape[0] < 2:
+        return None  # not per-video matrices; let layout B try
+    out: dict[str, np.ndarray] = {}
+    for p in npys:
+        mat = np.load(p)
+        if mat.ndim != 2:
+            continue
+        for i in range(mat.shape[0]):
+            out[f"{p.stem}_{i + 1:03d}"] = mat[i]
+    return out or None
 
 
 def _load_ids(features_dir: Path, *, n: int) -> list[str] | None:
@@ -181,13 +208,11 @@ def _load_ids(features_dir: Path, *, n: int) -> list[str] | None:
     return None
 
 
-def _load_layout_b(features_dir: Path) -> dict[str, np.ndarray] | None:
-    """Per-frame ``<id>.npy`` files."""
-    npys = sorted(features_dir.glob("*.npy"))
+def _load_layout_b(npys: list[Path]) -> dict[str, np.ndarray] | None:
+    """Per-frame ``<id>.npy`` single-vector files."""
     if len(npys) < 2:
         return None
     out: dict[str, np.ndarray] = {}
     for p in npys:
-        vec = np.load(p)
-        out[p.stem] = vec.reshape(-1)
+        out[p.stem] = np.load(p).reshape(-1)
     return out or None

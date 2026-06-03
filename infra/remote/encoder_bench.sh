@@ -48,6 +48,16 @@ fi
 echo "== provided-CLIP layout (first entries) =="
 find "$PROVIDED" -maxdepth 2 | head -10
 
+# --- Qwen3-VL-Embedding official repo (its .process() API, not AutoModel) ---
+QWEN_SRC="$HOME/Qwen3-VL-Embedding"
+QWEN_ARG=()
+if printf '%s' "$ENCODERS" | grep -q qwen3vl; then
+  [ -d "$QWEN_SRC" ] || git clone --depth 1 https://github.com/QwenLM/Qwen3-VL-Embedding "$QWEN_SRC" || true
+  cd "$DIR" && uv pip install -q qwen-vl-utils 2>/dev/null || true
+  QWEN_ARG=(--qwen-impl-src "$QWEN_SRC")
+  echo "== qwen impl src: $QWEN_SRC =="
+fi
+
 # --- run the bench ---
 cd "$DIR" || exit 1
 mkdir -p "$ROOT/bench"
@@ -57,6 +67,7 @@ uv run embed bench \
   --queries "$QTXT" \
   --encoders "$ENCODERS" \
   --provided-features "$PROVIDED" \
+  "${QWEN_ARG[@]}" \
   --n-docs "$N_DOCS" \
   --top-k 5 \
   --max-queries 20 \
