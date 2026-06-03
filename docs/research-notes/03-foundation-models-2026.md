@@ -53,6 +53,11 @@
 ### A.8 BLIP-2 ITC
 - Salesforce; Q-Former ITC head. Superseded for retrieval by SigLIP-2/Meta CLIP 2 but **excellent for ITM-style reranking**.
 
+### A.9 Qwen3-VL-Embedding (Alibaba, Jan 2026) - screened SPEC-0025, deferred as online encoder
+- Unified multimodal embedder (text+image+video -> one space), Apache-2.0, 2B (2048-d) / 8B (4096-d), MRL, **MMEB-V2 SOTA** (8B 77.8; strong visual-document retrieval). Official API: the QwenLM/Qwen3-VL-Embedding repo's `Qwen3VLEmbedder.process()` (instruction-aware), **not** plain `transformers.AutoModel`.
+- **Bake-off vs the floor on the AIC2025 proxy (SPEC-0025, 2026-06-03):** query-encode latency **~5x** SigLIP-2/Meta CLIP 2 (52.7 ms vs ~11-12 ms p50 on H200); and being a *unified 2B* it has no lightweight online text tower (unlike the CLIP-style floor), so its online footprint is the full model (~1.5-2 GB INT4, tight in the 5070's ~3 GB headroom; ADR-0003). **Verdict: do not adopt as the online query encoder; likely value is an offline visual-document lane (8B, fused), pending rigorous R@k (no 2025 ground truth).**
+- **Gemini Embedding 2** is disqualified for the retrieval path entirely: closed-weight API, incompatible with the air-gapped 5070 finals (the query encoder must run locally).
+
 ### Summary table (image-text)
 
 | Model | Params | IN-1k 0-shot | XM3600 | License | Best for |

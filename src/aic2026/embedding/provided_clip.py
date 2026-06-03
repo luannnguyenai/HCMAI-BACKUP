@@ -140,6 +140,13 @@ class ProvidedClipEmbedder:
         ).to(self._device)
         with torch.inference_mode():
             feats = self._text_model.get_text_features(**inputs)  # type: ignore[union-attr]
+        # transformers 5.x may return a ModelOutput rather than a bare tensor.
+        if not hasattr(feats, "detach"):
+            feats = (
+                getattr(feats, "text_embeds", None)
+                if getattr(feats, "text_embeds", None) is not None
+                else getattr(feats, "pooler_output", feats[0])
+            )
         arr = feats.detach().to("cpu", dtype=torch.float32).numpy()
         return l2_normalize(arr)
 
