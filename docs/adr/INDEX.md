@@ -23,3 +23,4 @@
 | [ADR-0009](ADR-0009-sdd-workflow.md) | Spec-Driven Development is the workflow | Accepted | 2026-05-26 | The workflow itself |
 | [ADR-0010](ADR-0010-borrow-from-2025-baseline.md) | Borrow from the 2025 baseline repo under attribution | Accepted | 2026-05-26 | Policy + per-file header + `THIRD_PARTY.md` |
 | [ADR-0011](ADR-0011-r2-artifact-store-and-lease-rollover.md) | Cloudflare R2 as the artifact store; 4-tier persistence across lease rollovers | Accepted | 2026-05-29 | Implemented in [SPEC-0022](../specs/SPEC-0022-remote-gpu-runner.md) |
+| [ADR-0012](ADR-0012-qwen-offline-visual-document-lane.md) | Qwen3-VL-Embedding-2B is an offline-only visual-document lane, never the online query encoder | Accepted | 2026-06-04 | Screened by [SPEC-0025](../specs/SPEC-0025-encoder-bench.md); offline lane via SPEC-0004 |

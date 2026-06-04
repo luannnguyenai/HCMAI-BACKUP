@@ -34,14 +34,20 @@ EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_NOT_FOUND = 3
 
-KNOWN_ENCODERS: tuple[str, ...] = ("dummy", "siglip2")
+KNOWN_ENCODERS: tuple[str, ...] = ("dummy", "siglip2", "qwen3vl")
 
 
 def _logger() -> logging.Logger:
     return logging.getLogger("aic2026.cli.embed")
 
 
-def _resolve_encoder(name: str, dim: int) -> Embedder:
+def _resolve_encoder(
+    name: str,
+    dim: int,
+    *,
+    impl_src: str | None = None,
+    out_dim: int | None = None,
+) -> Embedder:
     name = name.lower()
     if name == "dummy":
         return DummyEmbedder(dim=dim)
@@ -53,6 +59,20 @@ def _resolve_encoder(name: str, dim: int) -> Embedder:
             raise typer.Exit(EXIT_USAGE) from None
         try:
             return SigLip2Embedder()
+        except ImportError as exc:
+            typer.secho(f"ERROR: {exc}", err=True, fg=typer.colors.RED)
+            raise typer.Exit(EXIT_USAGE) from None
+    if name == "qwen3vl":
+        # Offline-only visual-document lane (ADR-0012): construct via the lazy
+        # official-repo path (mirrors `_resolve_bench_encoder`). `impl_src` is
+        # the cloned QwenLM/Qwen3-VL-Embedding repo; `out_dim` is the MRL width.
+        try:
+            from aic2026.embedding.qwen3vl_embed import Qwen3VLEmbedder
+        except ImportError as exc:  # pragma: no cover - exercised manually
+            typer.secho(f"ERROR: {exc}", err=True, fg=typer.colors.RED)
+            raise typer.Exit(EXIT_USAGE) from None
+        try:
+            return Qwen3VLEmbedder(out_dim=out_dim, impl_src=impl_src)
         except ImportError as exc:
             typer.secho(f"ERROR: {exc}", err=True, fg=typer.colors.RED)
             raise typer.Exit(EXIT_USAGE) from None
@@ -95,7 +115,10 @@ def images_cmd(
         int,
         typer.Option(
             "--dim",
-            help="Output dimensionality; only honoured by `dummy`. SigLIP-2 is fixed at 1024.",
+            help=(
+                "Output dimensionality; only honoured by `dummy`. SigLIP-2 is "
+                "fixed at 1152; qwen3vl uses --out-dim (native 2048)."
+            ),
             min=1,
         ),
     ] = 64,
@@ -103,12 +126,30 @@ def images_cmd(
         int,
         typer.Option("--batch-size", help="Per-call batch size.", min=1, max=1024),
     ] = 32,
+    impl_src: Annotated[
+        str | None,
+        typer.Option(
+            "--impl-src",
+            help=(
+                "Only honoured by qwen3vl (offline visual-document lane, ADR-0012): "
+                "path to the cloned QwenLM/Qwen3-VL-Embedding repo."
+            ),
+        ),
+    ] = None,
+    out_dim: Annotated[
+        int | None,
+        typer.Option(
+            "--out-dim",
+            help=("Only honoured by qwen3vl: MRL truncation width (defaults to the native 2048)."),
+            min=1,
+        ),
+    ] = None,
 ) -> None:
     """Offline-extract image embeddings from a directory of keyframes."""
     log = _logger()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    emb = _resolve_encoder(encoder, dim)
+    emb = _resolve_encoder(encoder, dim, impl_src=impl_src, out_dim=out_dim)
     paths = discover_images(input_dir)
     log.info("found %d image(s) under %s", len(paths), input_dir)
 

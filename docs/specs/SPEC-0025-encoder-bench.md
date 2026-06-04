@@ -1,15 +1,16 @@
 ---
 id: SPEC-0025
 title: Encoder bake-off (Qwen3-VL-Embedding vs SigLIP-2 / Meta CLIP 2 / provided CLIP)
-status: Implementing
+status: Implemented
 owner: unassigned
 created: 2026-06-02
-updated: 2026-06-02
+updated: 2026-06-04
 implements_proposal: docs/proposals/01-interactive-system-architecture.md SS 5.3 (encoder selection)
 related_adrs:
   - ADR-0003
   - ADR-0006
   - ADR-0007
+  - ADR-0012
 depends_on:
   - SPEC-0004
 ---
@@ -136,3 +137,4 @@ bin/embed bench --kf-root DIR --queries FILE_OR_DIR
 |---|---|---|
 | 2026-06-02 | implementer (user-directed) | Created at status **Implementing** (solo-flow, plan-approved). Scopes the Qwen3-VL-Embedding vs SigLIP-2 / Meta CLIP 2 / provided-CLIP bake-off on the AIC2025 proxy corpus: deployability (5070-fit) + qualitative side-by-side; rigorous R@k deferred (no GT). Implements 3 new `Embedder`s + `eval/encoder_bench` + `bin/embed bench` + a remote runner. Lease results to be appended here. |
 | 2026-06-03 | implementer | **Lease run on the H200 (8,000 keyframes x 4 encoders, GPU 1; GPU 0 was held by a stale 132 GB process).** All four encoders validated on real data after on-box integration fixes (Q2/Q3): siglip2 (1152-d), metaclip2 (1024-d), qwen3vl (2048-d via the official `.process()`), provided CLIP (512-d). **Deployability - query-encode latency p50 (H200, FP16):** siglip2 **10.6 ms**, metaclip2 **12.3 ms**, provided 11.0 ms, **qwen3vl 52.7 ms (~5x the floor)**. VRAM figures in `deployability.json` are cumulative (all 4 models resident; Q5) - not per-encoder - so the `fits_5070_headroom=false` flags are an artifact, not the real verdict. **Architectural footprint read (the real 5070 gate):** the CLIP-style floor hosts only a lightweight *text tower* online (~150-600 MB), whereas Qwen is a *unified 2B* with no separate light text tower, so its online path is the full model (~4.5 GB FP16; ~1.5-2 GB INT4 by param estimate - feasible in the ~3 GB headroom but tight, and it is the dominant online cost). **Qualitative:** `bench_report.html` (top-5 per query x 4 encoders over a 8k-frame sample) generated for human review; not self-judged here (no GT; subset means the exact answer frame is often absent, so it screens *topical* relevance, not recall). **Decision (directional):** do **not** adopt Qwen-2B as the online query encoder now - ~5x latency + full-2B online footprint + no accuracy edge demonstrated (R@k blocked on GT). Its likely real value is an **offline visual-document lane** (8B, fused), to be confirmed once GT exists. Floor (SigLIP-2 + Meta CLIP 2) remains the online encoder set. |
+| 2026-06-04 | implementer | Status **Implementing -> Implemented**. The 2026-06-03 directional decision is now formalized in [ADR-0012](../adr/ADR-0012-qwen-offline-visual-document-lane.md): **Qwen3-VL-Embedding-2B = offline-only visual-document lane** (its `encode_image` pre-indexed and fused via C2, GT-gated; SPEC-0015), **never** the online query encoder. The online floor (SigLIP-2 + Meta CLIP 2 text towers) is unchanged. The offline lane is wired into SPEC-0004 (`bin/embed images --encoder qwen3vl --impl-src ... [--out-dim N]`) + `infra/remote/qwen_offline_extract.sh`. `related_adrs += ADR-0012`. |
