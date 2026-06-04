@@ -368,6 +368,93 @@ def c1_demo(
     raise typer.Exit(EXIT_OK)
 
 
+@app.command("c1-calibrate")
+def c1_calibrate(
+    queries: Annotated[
+        Path | None,
+        typer.Option(
+            "--queries",
+            help="Real clean queries (file or dir) - the AIC2025 query/ set.",
+            exists=True,
+        ),
+    ] = None,
+    pairs: Annotated[
+        Path | None,
+        typer.Option(
+            "--pairs",
+            help="Our training Parquet; anchors profiled + synthetically noised.",
+            exists=True,
+        ),
+    ] = None,
+    ocr: Annotated[
+        Path | None,
+        typer.Option(
+            "--ocr",
+            help="Real OCR/ASR output strings (file or dir) to match noise against.",
+            exists=True,
+        ),
+    ] = None,
+    max_strings: Annotated[int, typer.Option("--max", min=1)] = 5000,
+    seed: Annotated[int, typer.Option("--seed")] = 0,
+    out: Annotated[Path | None, typer.Option("--out", help="Optional JSON report path.")] = None,
+) -> None:
+    """Calibrate the C1 synthetic noise schedule against real corpus text (SPEC-0014 Q2).
+
+    Profiles surface statistics of the real queries, our training anchors, our
+    synthetic per-mode noise, and (optionally) real OCR output, then emits a
+    distribution-match report + advisory flags pointing at which noise knob to
+    revisit. At least one of --queries / --pairs / --ocr is required.
+    """
+    _configure_logging()
+    if queries is None and pairs is None and ocr is None:
+        raise typer.BadParameter("provide at least one of --queries / --pairs / --ocr")
+
+    import json
+
+    from aic2026.train.calibrate import (
+        compare,
+        load_strings,
+        profile_synthetic_noise,
+        profile_text,
+    )
+
+    real_query = None
+    if queries is not None:
+        qs = load_strings(queries)
+        real_query = profile_text(qs[:max_strings]) if qs else None
+        typer.echo(f"real queries: {len(qs)} strings")
+
+    real_ocr = None
+    if ocr is not None:
+        os_ = load_strings(ocr)
+        real_ocr = profile_text(os_[:max_strings]) if os_ else None
+        typer.echo(f"real OCR: {len(os_)} strings")
+
+    our_anchor = None
+    synthetic = None
+    if pairs is not None:
+        from aic2026.train.diacritic_corpus import read_pairs
+
+        rows = read_pairs(pairs)
+        anchors = list({str(r["anchor_clean"]) for r in rows})[:max_strings]
+        our_anchor = profile_text(anchors) if anchors else None
+        synthetic = profile_synthetic_noise(anchors, seed=seed) if anchors else None
+        typer.echo(f"our anchors: {len(anchors)} unique")
+
+    report = compare(
+        real_query=real_query, our_anchor=our_anchor, real_ocr=real_ocr, synthetic=synthetic
+    )
+    typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
+    typer.echo(f"\nVERDICT: {report['verdict']}")
+    for f in report["flags"]:  # type: ignore[union-attr]
+        typer.echo(f"  - {f}")
+
+    if out is not None:
+        out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        typer.echo(f"wrote {out}")
+    raise typer.Exit(EXIT_OK)
+
+
 def main() -> None:
     """Entry point registered in `pyproject.toml [project.scripts]`."""
     try:
