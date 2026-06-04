@@ -112,6 +112,11 @@ class MaxSimRetriever:
             return np.zeros((len(queries), len(docs)), dtype=np.float32)
 
         dev = torch.device(self.device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        # The head is loaded on CPU (load_head map_location="cpu"); the encoder
+        # outputs are moved to `dev`, so the head must live on the same device or
+        # F.linear raises a cuda/cpu mismatch. Move it once (no-op if already there).
+        if self.head is not None:
+            self.head = self.head.to(dev)
 
         with torch.no_grad():
             de, dm = self.backbone.encode(docs)
