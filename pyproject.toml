@@ -27,10 +27,16 @@ dependencies = [
 embedding = [
     "torch>=2.4",
     "open-clip-torch>=2.32",
+    # transformers floor: Qwen3-VL-Embedding (SPEC-0025) may require a newer
+    # release than SigLIP-2 does; if the bench fails to load Qwen on the box,
+    # bump this floor per the HF model card (SPEC-0025 SS 9 Q2).
     "transformers>=4.45",
     "sentencepiece>=0.2",
     "huggingface-hub>=0.24",
     "pillow>=10",
+    # bitsandbytes: optional INT4 load for the SPEC-0025 deployability footprint
+    # (the 5070-fit gate). Only exercised on the GPU box; not installed in CI.
+    "bitsandbytes>=0.43",
 ]
 # SPEC-0014: C1 DiacriticBERT training. torch + transformers (frozen BGE-M3),
 # datasets (public Vietnamese corpora), pyarrow (the contrastive Parquet). Not

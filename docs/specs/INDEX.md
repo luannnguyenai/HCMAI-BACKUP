@@ -35,6 +35,7 @@
 | [SPEC-0021](SPEC-0021-ci-pipeline.md) | CI pipeline (lint + test + smoke-eval gate) | Implemented | _unassigned_ | 05 SS 6 | GitHub Actions; enforces per-PR smoke ([ADR-0009](../adr/ADR-0009-sdd-workflow.md)). Score-threshold gating deferred to SPEC-0001 AC7. Merged in PR #6 |
 | [SPEC-0022](SPEC-0022-remote-gpu-runner.md) | Remote GPU job runner + Cloudflare R2 artifact sync | Implementing | _unassigned_ | 05 SS 5 | `bin/remote` CLI. R2 ([ADR-0011](../adr/ADR-0011-r2-artifact-store-and-lease-rollover.md)) for cross-lease persistence. First job: `extract-siglip` wraps SPEC-0004. cache-weights added in spec/0023 |
 | [SPEC-0024](SPEC-0024-provision-packaging.md) | One-command provisioning + R2 warm-cache restore | Implementing | _unassigned_ | 05 SS 5 | Hardens SPEC-0022 `provision`; `cache-env` job; fixes `R2Client.list()` R2-checksum bug + run_id trap from the H200 lease |
+| [SPEC-0025](SPEC-0025-encoder-bench.md) | Encoder bake-off (Qwen3-VL-Embedding vs floor) | Implementing | _unassigned_ | 01 SS 5.3 | Directional screen on the AIC2025 proxy: deployability (5070-fit) + qualitative side-by-side. Extends SPEC-0004 `Embedder`; new MetaClip2/Qwen3VL/ProvidedClip + `eval/encoder_bench` + `bin/embed bench`. Rigorous R@k deferred (no GT) |
 
 ## Cross-cutting prior art
 
