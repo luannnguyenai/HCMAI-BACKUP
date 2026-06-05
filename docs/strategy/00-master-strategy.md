@@ -70,7 +70,7 @@ If at least two of {C1, C2, C4} pass their dev-set ablations, we are a technical
 |        +-- TransNetV2 shot detection                           |
 |        |     + KDE-GMM frame sampling -> ~1M keyframes         |
 |        |                                                       |
-|        +-- SigLIP-2 So400m/16@384 ---- 1024-d ---> Milvus#1    |
+|        +-- SigLIP-2 So400m/16@384 ---- 1152-d ---> Milvus#1    |
 |        +-- Meta CLIP 2 ViT-H/14   ---- 1024-d ---> Milvus#2    |
 |        +-- InternVideo2-1B (4 frames/clip) ------> Milvus#3    |
 |        |                                                       |
@@ -154,6 +154,8 @@ correct, fast submissions become the automatic agent's training corpus.
 ```
 
 For the full diagram and component decisions, see `docs/proposals/01-interactive-system-architecture.md` and `docs/proposals/02-automatic-track-agent.md`.
+
+> Note (updated 2026-06-05): the ASCII sketch above predates two shipped decisions. (1) Storage is a **single multi-vector Milvus `keyframes` collection** with named dense fields (SigLIP-2 1152, Meta CLIP 2 1024, Qwen3-VL-Embedding-2B 2048), keyed by a global `pk = "<video_id>_<frame_id>"`, per [SPEC-0006](../specs/SPEC-0006-milvus-schema-and-queries.md) - it supersedes the per-encoder `Milvus#1..#4` boxes drawn here. (2) An additional **Qwen3-VL-Embedding-2B offline-only visual-document lane** is indexed alongside the floor encoders ([ADR-0012](../adr/ADR-0012-qwen-offline-visual-document-lane.md); offline `encode_image` only, never the online query encoder). Encoder dims are verified: SigLIP-2 = 1152, Meta CLIP 2 = 1024, Qwen3-VL-Embedding-2B = 2048, InternVideo2 = 768.
 
 ## 4. The 17-week plan
 
@@ -268,5 +270,5 @@ The two operators must be cross-trained and able to swap mid-round.
 6. **Workflow** (resolved May 26, see [ADR-0009](../adr/ADR-0009-sdd-workflow.md) + [`CONTRIBUTING.md`](../../CONTRIBUTING.md)): **Spec-Driven Development**. Every code change traces to a SPEC; every irreversible decision is recorded as an ADR.
 7. **Dataset preview**: any way to access a sample of the AIC2026 data ahead of June 25? Ask HCMUS contacts. **Partial answer (2026-05-28)** via team-channel: organisers provide video + metadata (url, description, ...) + object detection + pre-extracted keyframes + pre-computed CLIP embeddings (the embeddings are reportedly low-quality, so we still compute our own). See [research-note 06](../research-notes/06-aic2026-dataset-shape.md) for the full intel and the six follow-up data-shape questions to validate post-June-25.
 8. **TRAKE in 2026?**: not confirmed yet that TRAKE remains a task in 2026; design for it but keep the rest task-agnostic.
-9. **Operator candidates**: identify the 2 operators by June 1 and start their practice schedule. Natural candidate: [`ThanhToan2111`](https://github.com/ThanhToan2111) (current team member, author of the 2025 baseline) — has the most operator-side experience with DRES and the AIC HCMC venue.
+9. **Operator candidates**: identify the 2 operators by June 1 and start their practice schedule. Natural candidate: [`ThanhToan2111`](https://github.com/ThanhToan2111) (current team member, author of the 2025 baseline) - has the most operator-side experience with DRES and the AIC HCMC venue.
 10. **Interview with the 2025 baseline author** (now confirmed team member): 30-minute agenda bundled in [`docs/permissions/2025-baseline-reuse.md`](../permissions/2025-baseline-reuse.md) §4. Resolves 10 currently-open questions across research-note 05 and SPEC-0018 in a single call. Schedule this week.

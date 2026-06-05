@@ -205,7 +205,7 @@ Acceptable. If we need to re-index after a model swap mid-competition, we can pa
 | Asset | Size for 1M frames |
 |---|---|
 | Keyframes (jpg @ 80% quality, 384px) | 30 GB |
-| SigLIP-2 embeddings (fp16, 1024-d) | 2 GB |
+| SigLIP-2 embeddings (fp16, 1152-d) | 2.3 GB |
 | Meta CLIP 2 embeddings | 2 GB |
 | InternVideo2 embeddings (per-shot, 768-d) | 0.5 GB |
 | CLAP embeddings | 1 GB |
