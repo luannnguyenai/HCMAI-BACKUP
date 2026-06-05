@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import numpy as np
 from pymilvus import MilvusClient
 
+# milvus_eval is a sibling lease helper copied to /tmp on the box, not an
+# installed module; make it importable before the late first-party import.
 sys.path.insert(0, "/tmp")
-from milvus_eval import load_lane_matrix  # noqa: E402
-from pathlib import Path  # noqa: E402
+from milvus_eval import load_lane_matrix
 
 URI = "http://127.0.0.1:19530"
 LANE = "siglip2"
@@ -26,16 +28,22 @@ except Exception as e:
     print("describe_index err:", e)
 
 # one stored vector as the query (exact self-known)
-row = c.query("keyframes", filter="video_id == 'L25_V001'",
-              output_fields=["frame_id", LANE], limit=1)[0]
+row = c.query(
+    "keyframes", filter="video_id == 'L25_V001'", output_fields=["frame_id", LANE], limit=1
+)[0]
 qv = np.asarray(row[LANE], dtype=np.float32)
 qn = qv / (np.linalg.norm(qv) or 1.0)
 
 
 def milvus_topk(ef: int) -> list[str]:
-    r = c.search("keyframes", data=[qv.tolist()], anns_field=LANE, limit=200,
-                 output_fields=["frame_id"],
-                 search_params={"metric_type": "IP", "params": {"ef": ef}})
+    r = c.search(
+        "keyframes",
+        data=[qv.tolist()],
+        anns_field=LANE,
+        limit=200,
+        output_fields=["frame_id"],
+        search_params={"metric_type": "IP", "params": {"ef": ef}},
+    )
     return [h["entity"]["frame_id"] for h in r[0]]
 
 
@@ -50,8 +58,10 @@ ex_norm = {fids[i] for i in np.argsort(-sc_norm)[:200]}
 
 for ef in (8, 128, 2048):
     got = set(milvus_topk(ef))
-    print(f"ef={ef:>4} | overlap vs exact_raw={len(got & ex_raw):3d}/200 "
-          f"vs exact_norm={len(got & ex_norm):3d}/200")
+    print(
+        f"ef={ef:>4} | overlap vs exact_raw={len(got & ex_raw):3d}/200 "
+        f"vs exact_norm={len(got & ex_norm):3d}/200"
+    )
 
 # are stored vectors actually unit norm?
 norms = np.linalg.norm(matrix[:5], axis=1)

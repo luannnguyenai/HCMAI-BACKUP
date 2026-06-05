@@ -212,8 +212,16 @@ def main() -> None:
             "boundary_tie_mult_mean": round(float(np.mean(tie_mult)), 1) if tie_mult else None,
         }
         qualitative["lanes"][lane] = [
-            [{"rank": h.rank, "pk": h.pk, "frame_id": h.frame_id, "video_id": h.video_id,
-              "score": round(h.score, 4)} for h in hits[:5]]
+            [
+                {
+                    "rank": h.rank,
+                    "pk": h.pk,
+                    "frame_id": h.frame_id,
+                    "video_id": h.video_id,
+                    "score": round(h.score, 4),
+                }
+                for h in hits[:5]
+            ]
             for hits in hnsw_hits
         ]
 
@@ -224,12 +232,14 @@ def main() -> None:
 
 
 def _write_html(path: Path, queries: list[str], lanes_q: dict, lanes: list[str]) -> None:
-    rows = ["<html><head><meta charset='utf-8'><style>",
-            "body{font-family:sans-serif;font-size:13px}",
-            "table{border-collapse:collapse;margin:8px 0}",
-            "td,th{border:1px solid #ccc;padding:3px 6px;vertical-align:top}",
-            "th{background:#eee}.q{font-weight:bold;background:#f6f6f6}</style></head><body>",
-            "<h2>SPEC-0006 Milvus proxy: qualitative top-5</h2>"]
+    rows = [
+        "<html><head><meta charset='utf-8'><style>",
+        "body{font-family:sans-serif;font-size:13px}",
+        "table{border-collapse:collapse;margin:8px 0}",
+        "td,th{border:1px solid #ccc;padding:3px 6px;vertical-align:top}",
+        "th{background:#eee}.q{font-weight:bold;background:#f6f6f6}</style></head><body>",
+        "<h2>SPEC-0006 Milvus proxy: qualitative top-5</h2>",
+    ]
     for qi, qtext in enumerate(queries):
         rows.append(f"<div class='q'>Q{qi}: {qtext[:300]}</div>")
         rows.append("<table><tr>" + "".join(f"<th>{ln}</th>" for ln in lanes) + "</tr><tr>")
