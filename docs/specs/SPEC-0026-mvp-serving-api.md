@@ -185,7 +185,8 @@ class ServingConfig:
     thumb_root: Path = Path("/data/thumbs")   # hydrated from R2 (ADR-0015)
     full_root: Path = Path("/data/frames")
     github_repo: str | None = None  # "owner/repo" for issue capture; None -> local fallback
-    shared_secret: str | None = None  # optional gate (SS 9 Q1)
+    shared_secret: str | None = None  # shared-secret gate, required in prod (SS 9 Q1 RESOLVED)
+    encode_device: str = "cpu"      # text-tower device; MVP runs CPU (SS 9 Q4 RESOLVED)
 ```
 
 ## 4. Behaviour
@@ -200,7 +201,10 @@ class ServingConfig:
   ([ADR-0008](../adr/ADR-0008-rrf-as-runtime-fallback.md)), emit fused 1-based
   ranks and keep `per_lane` raw scores. Requesting `fusion=rrf` with one lane is
   a 422.
-- **Default lane**: when `lanes` is omitted, query `siglip2` single-lane.
+- **Default lane**: when `lanes` is omitted, query `siglip2` single-lane. This
+  is the locked MVP default (SS 9 Q3 RESOLVED): one ranked list per query so
+  testers can attribute issues to a single lane; `metaclip2` and `fusion=rrf`
+  remain opt-in via the request.
 - **Empty / blank query**: `query_vi` shorter than 1 non-whitespace character is
   a 422; no search runs.
 - **WebSocket**: a client sends a `QueryRequest` JSON message; the server runs
@@ -263,12 +267,14 @@ class ServingConfig:
 
 ## 6. Non-functional requirements
 
-- **Query latency**: `POST /api/query` server-side p95 < 800 ms for one lane and
-  < 1000 ms for two-lane RRF at `top_k=48` on the shared server (text-tower
-  encode + per-lane ANN + fuse), excluding browser network. Consistent with
-  proposal 01 SS 4 (ANN p95 150 ms) and within the ADR-0004 end-to-end SLO
-  (p50 < 900 ms, p95 < 2 s) once UI render is added. Milvus ANN p95 is 16-51 ms
-  on the validated proxy (SPEC-0006 SS 11.8); encode dominates.
+- **Query latency**: `POST /api/query` server-side p95 < 1500 ms for one lane and
+  < 2500 ms for two-lane RRF at `top_k=48` on the shared server (text-tower
+  encode + per-lane ANN + fuse), excluding browser network. The MVP runs the
+  text tower on **CPU** (SS 9 Q4 RESOLVED), so a single short-query encode (a few
+  hundred ms to ~1 s) dominates: Milvus ANN p95 is only 16-51 ms on the validated
+  proxy (SPEC-0006 SS 11.8). This CPU budget is acceptable for qualitative MVP
+  testing; moving the text tower to a GPU (ADR-0003 finals path) restores the
+  proposal-01 sub-800 ms target without code change (`encode_device="cuda"`).
 - **Image-serve latency**: thumbnail p95 < 50 ms, full image p95 < 200 ms over
   the static tier (nginx), measured on the shared server LAN.
 - **Concurrency**: >= 10 concurrent testers and >= 5 queries/sec aggregate with
@@ -311,23 +317,27 @@ class ServingConfig:
 
 ## 9. Open questions
 
-- **Q1**: Access control for the shared URL. Options: a single shared-secret
-  header (`shared_secret` in `ServingConfig`), an SSH tunnel only, or open on a
-  private network. Recommend the shared-secret gate for the first test window;
-  confirm with the owner at approval.
-- **Q2**: Screenshot handling for the GitHub issue. Recommend upload to R2 and
-  link (GitHub's API has no clean base64-attachment path); confirm the R2 prefix
-  `issues/<timestamp>/` and whether the bucket is readable for issue viewers, or
-  whether a collapsed base64 block in the issue body is preferred.
-- **Q3**: Default served lanes. Recommend `siglip2` single-lane default with
-  `metaclip2` available and RRF opt-in; confirm whether the default should be
-  two-lane RRF instead (more recall, ~25 percent more latency).
-- **Q4**: Where the online text tower runs on the shared server (GPU lease box
-  vs CPU). On CPU the encode dominates the latency NFR; if the shared box is
-  CPU-only the p95 target may need revising. Confirm the shared-server hardware.
+- **Q1 RESOLVED (2026-06-05, user-directed)**: Access control is a single
+  shared-secret gate (`shared_secret` in `ServingConfig`, sent as a request
+  header); required in production. SSH-tunnel-only and open-private-network were
+  rejected as too much per-tester setup / too little control for a shared URL.
+- **Q2 (open)**: Screenshot handling for the GitHub issue. Recommend upload to R2
+  and link (GitHub's API has no clean base64-attachment path); confirm the R2
+  prefix `issues/<timestamp>/` and whether the bucket is readable for issue
+  viewers, or whether a collapsed base64 block in the issue body is preferred.
+  Resolve at implementation; does not block approval.
+- **Q3 RESOLVED (2026-06-05, user-directed)**: Default served lane is `siglip2`
+  single-lane (one ranked list per query, clean issue attribution); `metaclip2`
+  and `fusion=rrf` remain opt-in via the request. Two-lane-RRF-by-default was
+  rejected for the first test window (mixes signals when triaging issues).
+- **Q4 RESOLVED (2026-06-05, user-directed)**: The online text tower runs on
+  **CPU** on the shared server (no dedicated serving GPU required). The latency
+  NFR in SS 6 is set to the CPU-encode-dominated budget; `encode_device` is a
+  config knob so a GPU box can tighten it later without code change.
 
 ## 10. Changelog
 
 | Date | Author | Change |
 |---|---|---|
 | 2026-06-05 | spec author (AI, user-directed) | Created (Draft). FastAPI + WebSocket service wrapping the merged SPEC-0006 MilvusBackend: KIS query (text -> per-lane ANN -> single/RRF), frame detail, static thumbnail + full image serving (ADR-0015), issue capture to GitHub, health/readiness, R2 startup contract (ADR-0013). KIS-only; QA/TRAKE/agent/C2 deferred. Awaiting human approval before code. |
+| 2026-06-05 | implementer (user-directed) | Resolved Q1 (access = shared-secret gate), Q3 (default lane = siglip2 single-lane), Q4 (text tower on CPU). Revised SS 6 query-latency NFR to the CPU-encode-dominated budget (p95 < 1500 ms single / < 2500 ms RRF); added `encode_device` to `ServingConfig`. Q2 (screenshot R2-link vs base64) left open for implementation (non-blocking). |
