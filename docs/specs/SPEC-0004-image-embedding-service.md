@@ -4,12 +4,13 @@ title: Image-embedding service (SigLIP-2 + Meta CLIP 2 + InternVideo2-1B)
 status: Implementing
 owner: unassigned
 created: 2026-05-29
-updated: 2026-05-29
+updated: 2026-06-04
 implements_proposal: docs/proposals/01-interactive-system-architecture.md SS 5.3
 related_adrs:
   - ADR-0003
   - ADR-0006
   - ADR-0007
+  - ADR-0012
 depends_on:
   - SPEC-0001
 ---
@@ -33,6 +34,7 @@ The full dataset releases on June 25, 2026. Per [`docs/research-notes/06-aic2026
 - Concrete implementations:
   - **`DummyEmbedder`** - deterministic, numpy-only, CPU-only. The default for CI and for tests across the rest of the package.
   - **`SigLip2Embedder`** - real SigLIP-2 So400m/16@384, **1152-d**. Lazy-imports `torch` + `open_clip` inside methods; needs `transformers` + `sentencepiece` for the HF tokenizer (added to the extra). Gated behind a `[project.optional-dependencies] embedding` extra.
+  - **`Qwen3VLEmbedder`** - Qwen3-VL-Embedding-2B, **2048-d native** (optional MRL truncation via `out_dim`). An **offline-only visual-document lane** ([ADR-0012](../adr/ADR-0012-qwen-offline-visual-document-lane.md)), screened by [SPEC-0025](SPEC-0025-encoder-bench.md): only `encode_image` is used (for indexing keyframes); `encode_text` exists but is **not** on the online query path. Lazy-imports `torch`; in addition to the `embedding` extra it needs the cloned QwenLM/Qwen3-VL-Embedding repo passed as `impl_src` (its official `Qwen3VLEmbedder.process()` API, not plain `transformers.AutoModel` - SPEC-0025 SS 9 Q2). Defined in SPEC-0025; this spec wires it into the offline extraction CLI.
 - An offline extraction module `aic2026.embedding.extract` that batches a directory of images through an `Embedder` and writes:
   - `<out>.npy` - a `float32` matrix of shape `(n, dim)`
   - `<out>.manifest.jsonl` - one row per vector with `{row, frame_id, path}`, byte-for-byte aligned with the matrix.
@@ -100,9 +102,12 @@ def extract_image_embeddings(
 ```
 
 ```
-bin/embed images --input DIR --output PATH [--encoder dummy|siglip2] [--dim 1024] [--batch-size 32]
-bin/embed text   --text "..."             [--encoder dummy|siglip2] [--dim 1024]
+bin/embed images --input DIR --output PATH [--encoder dummy|siglip2|qwen3vl] [--dim 1024]
+                 [--batch-size 32] [--impl-src PATH] [--out-dim N]
+bin/embed text   --text "..."             [--encoder dummy|siglip2|qwen3vl] [--dim 1024]
 ```
+
+`--impl-src` and `--out-dim` are honoured only by `qwen3vl` (the offline visual-document lane, ADR-0012): `--impl-src` is the path to the cloned QwenLM/Qwen3-VL-Embedding repo; `--out-dim` is the MRL truncation width (defaults to the native 2048).
 
 ## 4. Behaviour
 
@@ -113,6 +118,7 @@ bin/embed text   --text "..."             [--encoder dummy|siglip2] [--dim 1024]
 - **Quality**: each row's L2 norm is within `1.0 +- 1e-3` (asserted by `extract_image_embeddings`).
 - **Determinism**: with `DummyEmbedder`, two runs over the same input directory produce byte-identical `.npy` and `.manifest.jsonl`.
 - **Offline / online split**: `encode_image` is documented offline-only (ADR-0003 SS Decision); the online code path on RTX 5070 only calls `encode_text`. The slice ships both methods on every encoder so a single class is callable in either mode; the split is enforced by deployment, not by a runtime guard.
+- **Qwen offline lane**: `Qwen3VLEmbedder` is indexed via `encode_image` only ([ADR-0012](../adr/ADR-0012-qwen-offline-visual-document-lane.md)). Its `encode_text` exists (a unified encoder) but is deliberately not on the online query path - it stays on the SigLIP-2 + Meta CLIP 2 text towers. The offline/online split remains deployment-enforced (consistent with the bullet above), not a runtime guard.
 
 ## 5. Acceptance criteria
 
@@ -121,6 +127,7 @@ bin/embed text   --text "..."             [--encoder dummy|siglip2] [--dim 1024]
 - **AC3**: `extract_image_embeddings` over a directory of `n` fake files yields `.npy` with shape `(n, dim)` and `.manifest.jsonl` whose row count and `frame_id`s match, in deterministic sort order. Re-running on the same input produces byte-identical outputs. Verified in `tests/unit/test_embedding_extract_AC3.py`.
 - **AC4**: `SigLip2Embedder` lazy-loads its heavy deps (no `import torch` at module import time) and, when those deps are present, returns `1152`-d L2-normalised vectors for both `encode_text` and `encode_image`. The test uses `pytest.importorskip("torch")` and skips in CI (the `embedding` extra is not installed in CI by design). Verified in `tests/unit/test_embedding_siglip2_AC4.py` and confirmed on H200 hardware 2026-05-30.
 - **AC5**: The spec and module docstrings document the offline-only nature of `encode_image` (ADR-0003) and the optional-extra packaging of the heavy backbones (ADR-0006). Verified by inspection (no test).
+- **AC6**: `bin/embed images --encoder qwen3vl` resolves the offline visual-document lane (ADR-0012) via the lazy `Qwen3VLEmbedder` path, threading `--impl-src` and `--out-dim`; when the deps + cloned repo are present it writes `2048`-d (or `--out-dim`) unit-norm vectors. The lazy-import contract is preserved (no `import torch` at CLI import time): invoking it without the `embedding` extra surfaces the extra hint and exits non-zero. Verified in `tests/unit/test_embed_cli_qwen_offline_AC6.py` (the CI-safe path asserts the hint + non-zero exit without importing torch; the live-deps path is `importorskip`-gated and skipped in CI).
 
 ## 6. Non-functional requirements
 
@@ -160,3 +167,4 @@ bin/embed text   --text "..."             [--encoder dummy|siglip2] [--dim 1024]
 |---|---|---|
 | 2026-05-29 | implementer (user-directed) | Created; Draft -> Approved -> Implementing in one pass for solo work per CONTRIBUTING. Slice (DummyEmbedder + SigLip2Embedder + extraction CLI) ships in branch `spec/0004-image-embedding-service`; Meta CLIP 2 + InternVideo2 land in follow-up PRs against this spec. |
 | 2026-05-30 | implementer | H200 lease findings (spec/0023): SigLIP-2 So400m dim corrected 1024 -> **1152** (verified on hardware); `transformers` + `sentencepiece` + `huggingface-hub` added to the `embedding` extra (were missing, broke the tokenizer load). |
+| 2026-06-04 | implementer | Wired the **Qwen3-VL-Embedding-2B offline visual-document lane** ([ADR-0012](../adr/ADR-0012-qwen-offline-visual-document-lane.md), screened by [SPEC-0025](SPEC-0025-encoder-bench.md)) into the offline extraction CLI: `qwen3vl` added to `bin/embed images`/`text` with `--impl-src` + `--out-dim` (offline-only; `encode_image` for indexing, never the online query encoder). Added SS 2.1 encoder bullet, SS 3 CLI surface, SS 4 behaviour note, **AC6**, and `related_adrs += ADR-0012`. New runner `infra/remote/qwen_offline_extract.sh`. |
