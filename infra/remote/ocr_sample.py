@@ -1,132 +1,125 @@
-#!/usr/bin/env python
-# Implements SPEC-0014 calibration support (C1 noise-schedule calibration).
-# Uncommitted infra helper (NOT part of the shipped package): sample N keyframes
-# from the AIC2025 proxy keyframe tree, run OCR over them on a pinned GPU, and
-# write a JSONL of the recognised Vietnamese surface text. This real-OCR output
-# is the empirical target that c1_calibrate.py compares the synthetic C1 noise
-# schedule against.
-#
-#   CUDA_VISIBLE_DEVICES=7 uv run python infra/remote/ocr_sample.py \
-#       --kf-root /tmp/aic2025/kf --n 400 --out /tmp/c1cal/ocr_sample.jsonl
-#
-# OCR backend: PaddleOCR had a CPU-only bug on this box before, so EasyOCR is the
-# default fallback (GPU when a CUDA device is visible). Pass --backend paddle to
-# try PaddleOCR. The script degrades gracefully: any per-image OCR error is
-# recorded and skipped, never fatal.
+#!/usr/bin/env python3
+"""Sample N keyframes, run Vietnamese OCR, dump recognized text (SPEC-0014 Q2).
+
+Feeds the C1 noise calibration: the recognized text over real AIC keyframes is
+the *real OCR-output distribution* we compare our synthetic `mixed_ocr` against
+(`bin/train c1-calibrate --ocr <out>`). We don't need the whole 121k-frame
+corpus - a few hundred text-bearing frames give stable surface statistics
+(fragmentation, digit rate, casing).
+
+Engines (our pipeline plans PaddleOCR PP-OCRv5; EasyOCR is an easier-to-install
+fallback that is equally representative for *surface-stat* calibration):
+  * ``--engine paddle`` (default): PaddleOCR, lang ``vi``. Handles both the 3.x
+    ``.predict`` and 2.x ``.ocr`` return shapes.
+  * ``--engine easy``: EasyOCR ``Reader(['vi']).readtext(..., detail=0)``.
+
+One output line per text-bearing frame = the space-joined recognized strings
+for that frame (this is what would land in the OCR index lane). Frames with no
+detected text are skipped. Robust per-image: an OCR failure on one frame is
+logged and skipped, never aborts the run.
+
+Usage (on the box):
+    uv run --with paddleocr --with paddlepaddle python ocr_sample.py \
+        --kf-root /tmp/aic2025/kf --n 1000 --out /tmp/aic2025/ocr_sample.txt
+    # fallback if PaddleOCR install is painful (torch already in the C1 env):
+    uv run --with easyocr python ocr_sample.py --engine easy --n 1000 ...
+"""
+
 from __future__ import annotations
 
 import argparse
-import json
 import random
 import sys
 import time
 from pathlib import Path
 
-IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 
-
-def discover_keyframes(kf_root: Path, n: int, seed: int) -> list[Path]:
-    """Reservoir-free uniform sample of N keyframe paths under kf_root."""
-    all_imgs = [p for p in kf_root.rglob("*") if p.suffix.lower() in IMAGE_EXTS]
+def _sample_images(kf_root: Path, n: int, seed: int) -> list[Path]:
+    imgs = sorted(kf_root.rglob("*.jpg"))
+    if not imgs:
+        raise SystemExit(f"no .jpg under {kf_root}")
     rng = random.Random(seed)
-    rng.shuffle(all_imgs)
-    return sorted(all_imgs[:n])
+    rng.shuffle(imgs)
+    return imgs[:n]
 
 
-def _build_easyocr(gpu: bool):
-    import easyocr  # type: ignore[import-not-found]
-
-    # Vietnamese + English; vi covers the diacritics, en catches latin scene text.
-    return easyocr.Reader(["vi", "en"], gpu=gpu)
-
-
-def _easyocr_text(reader, path: Path) -> tuple[str, int]:
-    res = reader.readtext(str(path), detail=1, paragraph=False)
-    texts = [t for (_box, t, _conf) in res if isinstance(t, str) and t.strip()]
-    return " ".join(texts), len(texts)
-
-
-def _build_paddle(gpu: bool):
-    from paddleocr import PaddleOCR  # type: ignore[import-not-found]
-
-    return PaddleOCR(use_angle_cls=True, lang="vi", use_gpu=gpu, show_log=False)
-
-
-def _paddle_text(ocr, path: Path) -> tuple[str, int]:
-    res = ocr.ocr(str(path), cls=True)
-    lines = []
-    for page in res or []:
-        for entry in page or []:
-            txt = entry[1][0] if entry and len(entry) > 1 else None
-            if isinstance(txt, str) and txt.strip():
-                lines.append(txt)
-    return " ".join(lines), len(lines)
+def _paddle_texts(ocr: object, path: Path) -> list[str]:
+    """Recognized strings from a PaddleOCR result, tolerant of 2.x/3.x shapes."""
+    # 3.x: ocr.predict(...) -> list[dict] with key "rec_texts".
+    predict = getattr(ocr, "predict", None)
+    if callable(predict):
+        out: list[str] = []
+        for res in predict(str(path)):
+            texts = res.get("rec_texts") if isinstance(res, dict) else None
+            if texts:
+                out.extend(str(t) for t in texts)
+        if out:
+            return out
+    # 2.x: ocr.ocr(path) -> [[ [box, (text, conf)], ... ]]
+    legacy = ocr.ocr(str(path))  # type: ignore[attr-defined]
+    out2: list[str] = []
+    for page in legacy or []:
+        for line in page or []:
+            if len(line) >= 2 and isinstance(line[1], (list, tuple)) and line[1]:
+                out2.append(str(line[1][0]))
+    return out2
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Sample keyframes + OCR -> JSONL.")
-    ap.add_argument("--kf-root", type=Path, default=Path("/tmp/aic2025/kf"))
-    ap.add_argument("--n", type=int, default=400)
-    ap.add_argument("--out", type=Path, default=Path("/tmp/c1cal/ocr_sample.jsonl"))
+def _build_paddle(lang: str):
+    from paddleocr import PaddleOCR
+
+    try:
+        return PaddleOCR(lang=lang, use_textline_orientation=False)
+    except TypeError:  # older signature
+        return PaddleOCR(lang=lang, use_angle_cls=False, show_log=False)
+
+
+def _build_easy(lang: str):
+    import easyocr
+
+    return easyocr.Reader([lang])
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Sample keyframes -> Vietnamese OCR text.")
+    ap.add_argument("--kf-root", type=Path, required=True)
+    ap.add_argument("--n", type=int, default=1000)
+    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--engine", choices=("paddle", "easy"), default="paddle")
+    ap.add_argument("--lang", default="vi")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--backend", choices=("easyocr", "paddle"), default="easyocr")
-    ap.add_argument("--gpu", type=int, default=1, help="1=use GPU (default), 0=CPU")
     args = ap.parse_args()
 
-    if not args.kf_root.is_dir():
-        print(f"ERROR: no keyframe root {args.kf_root}", file=sys.stderr)
-        return 2
+    sample = _sample_images(args.kf_root, args.n, args.seed)
+    print(f"sampled {len(sample)} frames from {args.kf_root} (engine={args.engine})")
 
-    paths = discover_keyframes(args.kf_root, args.n, args.seed)
-    print(f"[ocr] sampled {len(paths)} keyframes from {args.kf_root}", flush=True)
-    if not paths:
-        print("ERROR: no keyframes found", file=sys.stderr)
-        return 3
-
-    use_gpu = bool(args.gpu)
-    if args.backend == "easyocr":
-        try:
-            reader = _build_easyocr(use_gpu)
-        except Exception as exc:  # noqa: BLE001 - report + fall back to CPU
-            print(f"[ocr] easyocr GPU init failed ({exc}); retrying CPU", flush=True)
-            reader = _build_easyocr(False)
-        run = lambda p: _easyocr_text(reader, p)  # noqa: E731
+    if args.engine == "paddle":
+        engine = _build_paddle(args.lang)
+        extract = lambda p: _paddle_texts(engine, p)  # noqa: E731
     else:
-        ocr = _build_paddle(use_gpu)
-        run = lambda p: _paddle_text(ocr, p)  # noqa: E731
+        reader = _build_easy(args.lang)
+        extract = lambda p: [str(s) for s in reader.readtext(str(p), detail=0)]  # noqa: E731
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
+    n_text = 0
     t0 = time.time()
-    n_ok = n_text = 0
     with args.out.open("w", encoding="utf-8") as fh:
-        for i, p in enumerate(paths):
+        for i, path in enumerate(sample, 1):
             try:
-                text, n_boxes = run(p)
-                ok = True
-                err = None
-            except Exception as exc:  # noqa: BLE001 - per-image errors are non-fatal
-                text, n_boxes, ok, err = "", 0, False, str(exc)
-            rec = {"path": str(p), "text": text, "n_boxes": n_boxes, "ok": ok}
-            if err:
-                rec["error"] = err
-            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
-            n_ok += int(ok)
-            n_text += int(bool(text.strip()))
-            if (i + 1) % 25 == 0 or i == len(paths) - 1:
-                el = time.time() - t0
-                print(
-                    f"[ocr] {i + 1}/{len(paths)} | ok={n_ok} with_text={n_text} "
-                    f"| {el:.0f}s | {(i + 1) / el:.1f} img/s",
-                    flush=True,
-                )
+                texts = extract(path)
+            except Exception as exc:  # one bad frame shouldn't abort the sweep
+                print(f"  [skip] {path.name}: {type(exc).__name__}: {exc}", file=sys.stderr)
+                continue
+            line = " ".join(t.strip() for t in texts if t and t.strip())
+            if line:
+                fh.write(line + "\n")
+                n_text += 1
+            if i % 100 == 0:
+                rate = i / max(1e-6, time.time() - t0)
+                print(f"  {i}/{len(sample)} done, {n_text} with text ({rate:.1f} img/s)")
 
-    print(
-        f"[ocr] DONE backend={args.backend} gpu={use_gpu} "
-        f"ok={n_ok}/{len(paths)} with_text={n_text} -> {args.out}",
-        flush=True,
-    )
-    return 0
+    dt = time.time() - t0
+    print(f"OK wrote {n_text} text-bearing lines of {len(sample)} frames -> {args.out} ({dt:.0f}s)")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
