@@ -51,10 +51,24 @@ train = [
     "pyarrow>=16",
     "huggingface-hub>=0.24",
 ]
+# SPEC-0006: Milvus multi-vector keyframe store. The real ingest target is
+# Milvus standalone (docker) on the lease box for the HNSW build; dev/CI run
+# against the embedded, file-backed Milvus Lite mode that pymilvus bundles
+# (CPU-only, no network, FLAT index). pymilvus pulls in `milvus-lite` on
+# Linux/macOS, which is what backs the unit tests. Install the runtime client
+# via `uv sync --extra index`; CI gets it through the dev group below.
+# pymilvus[milvus_lite]: pymilvus >= 3.0 unbundled the embedded backend into
+# the `milvus_lite` extra, so it must be requested explicitly for the
+# file-backed Lite mode the dev/CI tests use. On a standalone deployment the
+# extra is harmless (the gRPC client is used instead).
+index = [
+    "pymilvus[milvus_lite]>=2.5",
+]
 
 [project.scripts]
 eval = "aic2026.cli.eval:main"
 embed = "aic2026.cli.embed:main"
+index = "aic2026.cli.index:main"
 remote = "aic2026.cli.remote:main"
 remote-job-exec = "aic2026.cli.remote_job_exec:main"
 train = "aic2026.cli.train:main"
@@ -71,6 +85,11 @@ dev = [
     # pyarrow: the C1 corpus builder (SPEC-0014) writes the contrastive Parquet;
     # tests exercise it via the clean_strings override (CPU, no network).
     "pyarrow>=16",
+    # pymilvus[milvus_lite]: SPEC-0006 Milvus store. CI runs the AC1-AC7 unit
+    # tests against a real embedded Milvus Lite instance in a tmp dir (FLAT,
+    # CPU, no network). The `milvus_lite` extra is required since pymilvus 3.0
+    # unbundled the embedded backend. Standalone HNSW is the lease-box target.
+    "pymilvus[milvus_lite]>=2.5",
 ]
 
 [build-system]
