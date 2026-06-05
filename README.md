@@ -32,11 +32,16 @@ ruff.toml                             # format + lint config
 .python-version                       # 3.11
 uv.lock                               # pinned dependency lockfile
 
-src/aic2026/                          # CODE - evaluation harness (SPEC-0001 Tier 1)
+src/aic2026/                          # CODE
   models/                             # Pydantic shapes: task, submission, metrics
-  harness/                            # backend protocol + stub, runner, scoring, aggregation
+  harness/                            # backend protocol + stub, runner, scoring, aggregation (SPEC-0001)
   reporting/                          # metrics.json, report.html, README provenance
   cli/                                # Typer CLI entry point (`eval`)
+  embedding/                          # Embedder protocol + SigLIP-2 / Qwen3-VL offline lane (SPEC-0004)
+  index/                              # Milvus multi-vector keyframe store + queries (SPEC-0006)
+  train/                              # C1 DiacriticBERT noise/corpus/train + calibrate (SPEC-0014)
+  eval/                               # encoder bench + retrievers + demo (SPEC-0025)
+  remote/                             # remote GPU job runner + R2 sync (SPEC-0022/0024)
 
 tests/
   unit/                               # AC2 + AC4 + scoring + stub-backend unit tests
@@ -82,8 +87,8 @@ docs/
     SPEC-0018-dres-integration.md     # Draft; borrows from 2025 baseline
   adr/                                # IMMUTABLE record of irreversible decisions
     template.md
-    INDEX.md                          # 10 accepted ADRs
-    ADR-0001 .. ADR-0010              # see INDEX for the full set
+    INDEX.md                          # 12 accepted ADRs
+    ADR-0001 .. ADR-0012              # see INDEX for the full set
   permissions/                        # explicit-attribution records under ADR-0010
     2025-baseline-reuse.md            # 2025-baseline-author signoff + interview agenda
   datasets/                           # placeholder for dataset references; corpus is gitignored
@@ -117,7 +122,7 @@ experiments/                          # per-experiment workspaces (e.g. llm-path
 **Moat (process, not technology):** aggressive operator drills (>=20% of prep time) and a submission-verification panel. PraK1 vs PraK2 differed by 30 points on the same engine; operator skill is the documented lever.
 
 ### Architecture in one paragraph
-Offline: ingest organiser-provided **keyframes + object detection + YouTube URLs** (see [research-note 06](docs/research-notes/06-aic2026-dataset-shape.md)) -> three image encoders (SigLIP-2, Meta CLIP 2, InternVideo2-1B) into Milvus; OCR via PaddleOCR/VietOCR and ASR via **yt-dlp YouTube captions** (primary) plus **PhoWhisper** (fallback) into Elasticsearch with BGE-M3 dense+sparse heads + a **DiacriticBERT late-interaction head** (our contribution); YOLO/Places365/LSC-ADL labels as structured filters; organisers' pre-computed CLIP retained as a 4th baseline lane. Online: planner LLM parses the Vietnamese query into a DAG of tool calls, runs in parallel, applies **per-task-type learned fusion** (RRF k=60 fallback), applies structured filters, optionally runs DANTE DP for TRAKE, reranks via Vintern-3B-beta VLM-as-judge, displays top-10 in a React UI; operator confirms via submission-verification bar. The same engine runs the automatic track driven by a planner **distilled from the operator's own traces**.
+Offline: ingest organiser-provided **keyframes + object detection + YouTube URLs** (see [research-note 06](docs/research-notes/06-aic2026-dataset-shape.md)) -> three image encoders (SigLIP-2, Meta CLIP 2, InternVideo2-1B) into a single multi-vector **Milvus** `keyframes` collection ([SPEC-0006](docs/specs/SPEC-0006-milvus-schema-and-queries.md)), plus a **Qwen3-VL-Embedding-2B offline-only visual-document lane** ([ADR-0012](docs/adr/ADR-0012-qwen-offline-visual-document-lane.md); never the online query encoder); OCR via PaddleOCR/VietOCR and ASR via **yt-dlp YouTube captions** (primary) plus **PhoWhisper** (fallback) into Elasticsearch with BGE-M3 dense+sparse heads + a **DiacriticBERT late-interaction head** (our contribution); YOLO/Places365/LSC-ADL labels as structured filters; organisers' pre-computed CLIP retained as a 4th baseline lane. Online: planner LLM parses the Vietnamese query into a DAG of tool calls, runs in parallel, applies **per-task-type learned fusion** (RRF k=60 fallback), applies structured filters, optionally runs DANTE DP for TRAKE, reranks via Vintern-3B-beta VLM-as-judge, displays top-10 in a React UI; operator confirms via submission-verification bar. The same engine runs the automatic track driven by a planner **distilled from the operator's own traces**.
 
 ### Timeline
 | Phase | Weeks | Goal |
