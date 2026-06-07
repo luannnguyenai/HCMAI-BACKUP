@@ -1,10 +1,10 @@
 ---
 id: SPEC-0026
 title: MVP serving API (Vietnamese KIS query + keyframe image serving + issue capture)
-status: Draft
+status: Approved
 owner: unassigned
 created: 2026-06-05
-updated: 2026-06-05
+updated: 2026-06-07
 implements_proposal: docs/proposals/01-interactive-system-architecture.md SS 5.1
 related_adrs:
   - ADR-0003
@@ -341,3 +341,4 @@ class ServingConfig:
 |---|---|---|
 | 2026-06-05 | spec author (AI, user-directed) | Created (Draft). FastAPI + WebSocket service wrapping the merged SPEC-0006 MilvusBackend: KIS query (text -> per-lane ANN -> single/RRF), frame detail, static thumbnail + full image serving (ADR-0015), issue capture to GitHub, health/readiness, R2 startup contract (ADR-0013). KIS-only; QA/TRAKE/agent/C2 deferred. Awaiting human approval before code. |
 | 2026-06-05 | implementer (user-directed) | Resolved Q1 (access = shared-secret gate), Q3 (default lane = siglip2 single-lane), Q4 (text tower on CPU). Revised SS 6 query-latency NFR to the CPU-encode-dominated budget (p95 < 1500 ms single / < 2500 ms RRF); added `encode_device` to `ServingConfig`. Q2 (screenshot R2-link vs base64) left open for implementation (non-blocking). |
+| 2026-06-07 | team lead (approval) | Status Draft -> Approved (human approval gate per AGENTS.md, PR #24). ADR-0013/0014/0015 accepted alongside. Implementation begins on `spec/0026-mvp-serving-api`. Q2 resolved at implementation: screenshot uploaded to R2 (`issues/<timestamp>/screenshot.png`) and linked in the GitHub issue body; local-fallback writes the PNG next to the JSON payload. |

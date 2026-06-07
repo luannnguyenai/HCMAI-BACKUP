@@ -1,10 +1,10 @@
 ---
 id: SPEC-0027
 title: MVP operator UI (React + WebSocket KIS console)
-status: Draft
+status: Approved
 owner: unassigned
 created: 2026-06-05
-updated: 2026-06-05
+updated: 2026-06-07
 implements_proposal: docs/proposals/06-ui-ux-design.md
 related_adrs:
   - ADR-0004
@@ -265,3 +265,4 @@ export interface UiState {
 | Date | Author | Change |
 |---|---|---|
 | 2026-06-05 | spec author (AI, user-directed) | Created (Draft). MVP React + WebSocket KIS console (query box, lane selector, virtualised thumbnail grid, frame detail, in-UI issue capture) as the proposal-06 subset, served by the SPEC-0026 API (ADR-0004 stack, ADR-0013 shared server, ADR-0015 thumbnails). TRAKE/QA/planner/verification-bar/novice-mode out of scope. Awaiting human approval before code. |
+| 2026-06-07 | team lead (approval) | Status Draft -> Approved (human approval gate per AGENTS.md, PR #24). Q1 resolved: grid virtualiser = `react-virtuoso`. Q2 resolved: screenshot lib = `html2canvas`. Q3 resolved: keep a lightweight in-memory last-10 query history. Q4 resolved: render OCR/ASR rows conditionally now (null on proxy). Implementation begins on `spec/0026-mvp-serving-api`. |

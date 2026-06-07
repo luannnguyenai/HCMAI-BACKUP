@@ -1,8 +1,8 @@
 ---
 id: ADR-0015
 title: Keyframe images are served as a pre-generated thumbnail tier banked to R2
-status: Proposed
-decided_on: 2026-06-05
+status: Accepted
+decided_on: 2026-06-07
 deciders:
   - team lead
 related_adrs:
@@ -15,7 +15,7 @@ related_adrs:
 
 ## Status
 
-Proposed.
+Accepted (2026-06-07, PR #24).
 
 ## Context
 

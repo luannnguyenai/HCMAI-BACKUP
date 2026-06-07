@@ -1,6 +1,6 @@
 # ADR Registry
 
-> Append-only record of architectural decisions. Never reuse an ID; never edit a Accepted ADR's Decision/Context ó supersede it instead. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for the workflow.
+> Append-only record of architectural decisions. Never reuse an ID; never edit a Accepted ADR's Decision/Context ù supersede it instead. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for the workflow.
 
 ## Conventions
 
@@ -24,6 +24,6 @@
 | [ADR-0010](ADR-0010-borrow-from-2025-baseline.md) | Borrow from the 2025 baseline repo under attribution | Accepted | 2026-05-26 | Policy + per-file header + `THIRD_PARTY.md` |
 | [ADR-0011](ADR-0011-r2-artifact-store-and-lease-rollover.md) | Cloudflare R2 as the artifact store; 4-tier persistence across lease rollovers | Accepted | 2026-05-29 | Implemented in [SPEC-0022](../specs/SPEC-0022-remote-gpu-runner.md) |
 | [ADR-0012](ADR-0012-qwen-offline-visual-document-lane.md) | Qwen3-VL-Embedding-2B is an offline-only visual-document lane, never the online query encoder | Accepted | 2026-06-04 | Screened by [SPEC-0025](../specs/SPEC-0025-encoder-bench.md); offline lane via SPEC-0004 |
-| [ADR-0013](ADR-0013-mvp-single-shared-server-from-r2.md) | MVP deployment topology is one shared server fed from R2 | Proposed | 2026-06-05 | MVP test topology (not finals). Implemented by [SPEC-0026](../specs/SPEC-0026-mvp-serving-api.md); R2 source-of-truth per [ADR-0011](ADR-0011-r2-artifact-store-and-lease-rollover.md) |
-| [ADR-0014](ADR-0014-mvp-reuse-milvus-backend-standalone.md) | MVP retrieval path reuses the SPEC-0006 MilvusBackend on Milvus standalone | Proposed | 2026-06-05 | One code path, not numpy/Lite. Wrapped by [SPEC-0026](../specs/SPEC-0026-mvp-serving-api.md); FastAPI per [ADR-0004](ADR-0004-no-streamlit-react-websocket-ui.md); RRF per [ADR-0008](ADR-0008-rrf-as-runtime-fallback.md) |
-| [ADR-0015](ADR-0015-keyframe-image-hosting-thumbnails.md) | Keyframe images served as a pre-generated thumbnail tier banked to R2 | Proposed | 2026-06-05 | Sourcing/hydration for ~19 GB / 121k JPGs; nginx static serving per [ADR-0004](ADR-0004-no-streamlit-react-websocket-ui.md); consumed by [SPEC-0026](../specs/SPEC-0026-mvp-serving-api.md) |
+| [ADR-0013](ADR-0013-mvp-single-shared-server-from-r2.md) | MVP deployment topology is one shared server fed from R2 | Accepted | 2026-06-07 | MVP test topology (not finals). Implemented by [SPEC-0026](../specs/SPEC-0026-mvp-serving-api.md); R2 source-of-truth per [ADR-0011](ADR-0011-r2-artifact-store-and-lease-rollover.md) |
+| [ADR-0014](ADR-0014-mvp-reuse-milvus-backend-standalone.md) | MVP retrieval path reuses the SPEC-0006 MilvusBackend on Milvus standalone | Accepted | 2026-06-07 | One code path, not numpy/Lite. Wrapped by [SPEC-0026](../specs/SPEC-0026-mvp-serving-api.md); FastAPI per [ADR-0004](ADR-0004-no-streamlit-react-websocket-ui.md); RRF per [ADR-0008](ADR-0008-rrf-as-runtime-fallback.md) |
+| [ADR-0015](ADR-0015-keyframe-image-hosting-thumbnails.md) | Keyframe images served as a pre-generated thumbnail tier banked to R2 | Accepted | 2026-06-07 | Sourcing/hydration for ~19 GB / 121k JPGs; nginx static serving per [ADR-0004](ADR-0004-no-streamlit-react-websocket-ui.md); consumed by [SPEC-0026](../specs/SPEC-0026-mvp-serving-api.md) |

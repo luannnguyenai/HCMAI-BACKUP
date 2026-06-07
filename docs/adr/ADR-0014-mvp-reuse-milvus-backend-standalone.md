@@ -1,8 +1,8 @@
 ---
 id: ADR-0014
 title: The MVP retrieval path reuses the SPEC-0006 MilvusBackend on Milvus standalone
-status: Proposed
-decided_on: 2026-06-05
+status: Accepted
+decided_on: 2026-06-07
 deciders:
   - team lead
 related_adrs:
@@ -18,7 +18,7 @@ related_specs:
 
 ## Status
 
-Proposed.
+Accepted (2026-06-07, PR #24).
 
 ## Context
 

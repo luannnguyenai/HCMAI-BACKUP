@@ -1,8 +1,8 @@
 ---
 id: ADR-0013
 title: MVP deployment topology is one shared server fed from R2
-status: Proposed
-decided_on: 2026-06-05
+status: Accepted
+decided_on: 2026-06-07
 deciders:
   - team lead
 related_adrs:
@@ -15,7 +15,7 @@ related_adrs:
 
 ## Status
 
-Proposed.
+Accepted (2026-06-07, PR #24).
 
 ## Context
 
