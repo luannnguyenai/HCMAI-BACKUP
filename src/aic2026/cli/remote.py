@@ -1,9 +1,13 @@
-# Implements SPEC-0022 SS 3 (CLI surface) and AC6.
+# Implements SPEC-0022 SS 3 (CLI surface) and AC6; SPEC-0028 SS 3-4 (preflight).
 """`bin/remote` command-line interface.
 
-Six subcommands per SPEC-0022 SS 4: setup, provision, run, pull, list,
-teardown. The `run` subcommand supports `--dry-run` (AC6) which prints the
-planned actions and exits 0 with no side effects (no ssh, no R2).
+Subcommands per SPEC-0022 SS 4: setup, provision, run, pull, list, teardown.
+The `run` subcommand supports `--dry-run` (AC6) which prints the planned actions
+and exits 0 with no side effects (no ssh, no R2).
+
+`preflight` (SPEC-0028) is the bank-before-consume guard (ADR-0016 rule c): it
+verifies a job's required R2 prefixes exist and are non-empty before the job
+runs. `run --require-prefix` wires the same check in as an opt-in guard.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from aic2026.remote.launchers import (
     launch_ssh,
 )
 from aic2026.remote.manifest import ManifestEntry, append_to_r2, read_all
+from aic2026.remote.preflight import PreflightError, check_prefixes, require_prefixes
 from aic2026.remote.r2 import R2Client
 from aic2026.remote.registry import resolve
 from aic2026.remote.ssh import SSHError, push_git_archive, resolve_host, ssh_exec
@@ -43,6 +48,7 @@ EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_CONFIG = 3
 EXIT_REMOTE = 4
+EXIT_PRECONDITION = 5  # SPEC-0028: a required R2 prefix is missing/empty
 
 KNOWN_LAUNCHERS: tuple[str, ...] = ("srun", "sbatch", "ssh", "local")
 ALLOWED_REMOTE_ENV_KEYS: tuple[str, ...] = (
@@ -257,6 +263,7 @@ def _format_dry_run_plan(
     launcher: str,
     remote_cmd: str,
     config: dict[str, str],
+    require_prefix: list[str] | None = None,
 ) -> str:
     lines = [
         "DRY-RUN plan (no side effects):",
@@ -269,7 +276,12 @@ def _format_dry_run_plan(
         f"  remote_dir = {ctx.remote_run_dir}",
         f"  r2_prefix  = {ctx.r2_prefix}",
         f"  config     = {config}",
+        f"  require    = {require_prefix or []}",
         "  -- planned commands --",
+    ]
+    if require_prefix:
+        lines.append(f"  R2 preflight require_prefixes (SPEC-0028): {require_prefix}")
+    lines += [
         f"  ssh {host} 'mkdir -p {ctx.remote_run_dir}'",
         f"  {launcher}: {remote_cmd}",
         f"  R2 upload_dir {ctx.local_run_dir} -> s3://<bucket>/{ctx.r2_prefix}/",
@@ -315,12 +327,24 @@ def run_cmd(
         list[str] | None,
         typer.Option("--config", help="Free-form key=value passed to the job. Repeatable."),
     ] = None,
+    require_prefix: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--require-prefix",
+            help=(
+                "Opt-in bank-before-consume guard (SPEC-0028 / ADR-0016): a "
+                "bucket-relative R2 prefix that must exist and be non-empty "
+                "before the job runs. Repeatable. Omitted -> no precondition check."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Run a registered job on the cluster; upload outputs to R2; append the ledger."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     log = _logger()
     _ensure_jobs_loaded()
     config = config or []
+    require_prefix = require_prefix or []
 
     if launcher not in KNOWN_LAUNCHERS:
         typer.secho(
@@ -349,10 +373,28 @@ def run_cmd(
     if dry_run:
         typer.echo(
             _format_dry_run_plan(
-                ctx=ctx, host=host, launcher=launcher, remote_cmd=remote_cmd, config=cfg
+                ctx=ctx,
+                host=host,
+                launcher=launcher,
+                remote_cmd=remote_cmd,
+                config=cfg,
+                require_prefix=require_prefix,
             )
         )
         raise typer.Exit(EXIT_OK)
+
+    # SPEC-0028 / ADR-0016 rule (c): opt-in bank-before-consume guard. Only runs
+    # when the caller declared required prefixes; otherwise no R2 call is made
+    # and `run` keeps its prior behaviour exactly.
+    if require_prefix:
+        log.info("preflight: require R2 prefixes %s", require_prefix)
+        try:
+            result = require_prefixes(R2Client(), require_prefix)
+        except PreflightError as exc:
+            typer.secho(f"ERROR: {exc}", err=True, fg=typer.colors.RED)
+            raise typer.Exit(EXIT_PRECONDITION) from None
+        for status in result.statuses:
+            log.info("preflight OK %s (%d object(s))", status.prefix, status.object_count)
 
     log.info("dispatching job=%s run_id=%s via %s", job, ctx.run_id, launcher)
     ctx.local_run_dir.mkdir(parents=True, exist_ok=True)
@@ -397,6 +439,57 @@ def run_cmd(
         typer.secho(f"WARNING: post-run R2 sync failed: {exc}", err=True, fg=typer.colors.RED)
 
     raise typer.Exit(result.exit_code)
+
+
+# --- preflight -------------------------------------------------------------
+
+
+@app.command("preflight")
+def preflight_cmd(
+    require: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--require",
+            help=(
+                "Bucket-relative R2 prefix that must exist and be non-empty. "
+                "Repeatable. At least one is required."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Verify required R2 prefixes exist and are non-empty (SPEC-0028).
+
+    The executable form of ADR-0016 rule (c): a lease job may only consume
+    inputs that already live in R2, never a box-local copy. Exits 0 when every
+    prefix is present, 5 when any is missing/empty, 2 when no `--require` is given.
+    """
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    require = require or []
+    if not require:
+        typer.secho(
+            "ERROR: preflight needs at least one --require <prefix> to check.",
+            err=True,
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(EXIT_USAGE)
+
+    result = check_prefixes(R2Client(), require)
+    for status in result.statuses:
+        mark = "OK " if status.present else "MISSING"
+        typer.echo(f"{mark} {status.prefix} ({status.object_count} object(s))")
+
+    if not result.ok:
+        typer.secho(
+            "ERROR: R2 precondition failed (ADR-0016 bank-before-consume): "
+            f"missing/empty prefix(es): {', '.join(result.missing())}. "
+            "Bank the input(s) before running the job.",
+            err=True,
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(EXIT_PRECONDITION)
+
+    typer.echo(f"OK all {len(result.statuses)} required prefix(es) present")
+    raise typer.Exit(EXIT_OK)
 
 
 # --- pull ------------------------------------------------------------------
