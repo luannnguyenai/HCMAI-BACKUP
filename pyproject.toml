@@ -64,6 +64,17 @@ train = [
 index = [
     "pymilvus[milvus_lite]>=2.5",
 ]
+# SPEC-0026: MVP serving API. FastAPI + uvicorn (async, ADR-0004) wrapping the
+# merged SPEC-0006 MilvusBackend. `uvicorn[standard]` is only needed to actually
+# run the server (it brings websockets / httptools); the unit + AC tests drive
+# the app in-process via fastapi's TestClient, so CI gets `fastapi` through the
+# dev group below without the heavier uvicorn extras. Install to serve:
+# `uv sync --extra serving --extra index`. httpx (GitHub issue POST) and boto3
+# (R2 screenshot upload) are existing core deps.
+serving = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+]
 
 [project.scripts]
 eval = "aic2026.cli.eval:main"
@@ -71,6 +82,7 @@ embed = "aic2026.cli.embed:main"
 index = "aic2026.cli.index:main"
 remote = "aic2026.cli.remote:main"
 remote-job-exec = "aic2026.cli.remote_job_exec:main"
+serve = "aic2026.cli.serve:main"
 train = "aic2026.cli.train:main"
 
 [dependency-groups]
@@ -90,6 +102,11 @@ dev = [
     # CPU, no network). The `milvus_lite` extra is required since pymilvus 3.0
     # unbundled the embedded backend. Standalone HNSW is the lease-box target.
     "pymilvus[milvus_lite]>=2.5",
+    # fastapi: SPEC-0026 serving API. CI runs the AC1-AC9 serving tests in-process
+    # via fastapi's TestClient (no uvicorn / network). The `serving` extra adds
+    # uvicorn for actually running the server; tests need only fastapi + httpx
+    # (httpx is already a core dep).
+    "fastapi>=0.115",
 ]
 
 [build-system]

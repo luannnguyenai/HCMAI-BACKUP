@@ -65,6 +65,79 @@ def make_encoder_source(
 
 
 @pytest.fixture
+def serving_env(tmp_path: Path, milvus_lite_store: Callable[..., MilvusKeyframeStore]):
+    """A Milvus-Lite-backed `QueryService` + config for the SPEC-0026 AC tests.
+
+    Builds a two-lane store (siglip2 / metaclip2, small dims), ingests two
+    videos of 10 frames each through the real SPEC-0004 producer path, and wires
+    `DummyEmbedder` text towers so the whole serving query path runs on CPU with
+    no GPU, no Docker, and no network. Returns a `SimpleNamespace` so tests can
+    reach the store, service, config, and the ingested ids.
+    """
+    from types import SimpleNamespace
+
+    from aic2026.embedding.dummy import DummyEmbedder
+    from aic2026.index.milvus_schema import DenseField
+    from aic2026.serving.config import ServingConfig
+    from aic2026.serving.models import Lane
+    from aic2026.serving.service import QueryService
+
+    dim = 8
+    fields = (DenseField("siglip2", dim), DenseField("metaclip2", dim))
+    store = milvus_lite_store(fields=fields)
+
+    frame_ids = [f"{i:04d}" for i in range(10)]
+    videos = ["L25_V001", "L25_V002"]
+    src_root = tmp_path / "src"
+    for video in videos:
+        sources = {
+            f.name: make_encoder_source(src_root, f.name, frame_ids, dim=dim, video=video)
+            for f in fields
+        }
+        store.ingest(sources, video_id=video)
+
+    encoders = {
+        Lane.siglip2: DummyEmbedder(dim=dim, model_id="q-siglip2"),
+        Lane.metaclip2: DummyEmbedder(dim=dim, model_id="q-metaclip2"),
+    }
+    thumb_root = tmp_path / "thumbs"
+    thumb_root.mkdir()
+    full_root = tmp_path / "frames"
+    full_root.mkdir()
+    config = ServingConfig(
+        milvus_uri=store.uri,
+        collection=store.collection,
+        online_lanes=("siglip2", "metaclip2"),
+        thumb_root=thumb_root,
+        full_root=full_root,
+        issue_fallback_dir=tmp_path / "issues",
+    )
+    service = QueryService(store, encoders, config)
+    return SimpleNamespace(
+        store=store,
+        service=service,
+        config=config,
+        encoders=encoders,
+        frame_ids=frame_ids,
+        videos=videos,
+        thumb_root=thumb_root,
+        full_root=full_root,
+    )
+
+
+@pytest.fixture
+def serving_client(serving_env):
+    """A `TestClient` over the SPEC-0026 app with the injected `serving_env`."""
+    from fastapi.testclient import TestClient
+
+    from aic2026.serving.app import create_app
+
+    app = create_app(serving_env.config, service=serving_env.service)
+    with TestClient(app) as client:
+        yield client
+
+
+@pytest.fixture
 def milvus_lite_store(tmp_path: Path) -> Callable[..., MilvusKeyframeStore]:
     """Factory: build a Milvus Lite-backed store, skipping if Lite won't start."""
     pytest.importorskip("pymilvus", reason="pymilvus not installed (index extra)")
