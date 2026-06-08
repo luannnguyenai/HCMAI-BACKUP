@@ -10,11 +10,14 @@ export function HistoryList() {
   if (history.length === 0) return null;
 
   return (
-    <div data-testid="history" className="flex flex-wrap gap-2 text-sm">
+    <div data-testid="history" className="flex flex-wrap items-center gap-1.5">
+      <span className="label mr-1">gan day</span>
       {history.map((q) => (
         <button
           key={q}
-          className="border rounded px-2 py-1 opacity-80"
+          type="button"
+          className="chip max-w-[16rem] truncate"
+          title={q}
           onClick={() => {
             setQuery(q);
             void run();

@@ -1,12 +1,126 @@
+/* Implements SPEC-0027 SS 4 (operator console base styles + design tokens). */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light dark;
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: theme("colors.ink.950");
+    color: theme("colors.fg.DEFAULT");
+    font-family: theme("fontFamily.sans");
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Subtle top-lit gradient so the surface does not read as flat black. */
+  body {
+    background-image: radial-gradient(
+      120% 70% at 50% -10%,
+      rgba(45, 212, 191, 0.05),
+      transparent 60%
+    );
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: rgba(45, 212, 191, 0.28);
+  }
+
+  *:focus-visible {
+    outline: 2px solid theme("colors.accent.DEFAULT");
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Dark, slim scrollbars to match the console. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: theme("colors.line.strong") transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: theme("colors.line.strong");
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: theme("colors.fg.faint");
+    background-clip: content-box;
+  }
 }
 
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+@layer components {
+  .panel {
+    @apply rounded-lg border border-line bg-ink-850 shadow-panel;
+  }
+
+  .input {
+    @apply w-full rounded-md border border-line bg-ink-900 px-3 py-2 text-fg
+      placeholder:text-fg-faint
+      focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/25;
+  }
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-md
+      border border-line bg-ink-800 px-3 py-2 text-sm font-medium text-fg
+      transition-colors hover:bg-ink-700 hover:border-line-strong
+      disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  .btn-primary {
+    @apply border-transparent bg-accent text-ink-950 font-semibold
+      hover:bg-accent-strong hover:border-transparent;
+  }
+
+  .btn-ghost {
+    @apply border-transparent bg-transparent hover:bg-ink-800;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-2 rounded-full border border-line
+      bg-ink-900 px-3 py-1 text-xs font-medium;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-md border border-line
+      bg-ink-900 px-2 py-1 text-xs text-fg-muted transition-colors
+      hover:border-line-strong hover:text-fg;
+  }
+
+  .label {
+    @apply text-[11px] font-medium uppercase tracking-wider text-fg-faint;
+  }
+
+  .kbd {
+    @apply inline-flex min-w-[1.4rem] items-center justify-center rounded
+      border border-line bg-ink-900 px-1.5 py-0.5 font-mono text-[10px]
+      leading-none text-fg-muted;
+  }
+
+  /* Loading skeleton shimmer used by the result grid. */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      theme("colors.ink.800") 25%,
+      theme("colors.ink.700") 37%,
+      theme("colors.ink.800") 63%
+    );
+    background-size: 800px 100%;
+    @apply animate-shimmer;
+  }
 }

@@ -1,7 +1,7 @@
 // Implements SPEC-0027 SS 4 (run a query: WS hot path + REST fallback).
 import { useCallback } from "react";
 
-import { DEFAULT_RRF_K, DEFAULT_TOP_K, type QueryRequest } from "../api/types";
+import { DEFAULT_RRF_K, type QueryRequest } from "../api/types";
 import { useServices } from "../services";
 import { useStore } from "../store";
 
@@ -16,6 +16,7 @@ export function useSearch(): () => Promise<void> {
   const query = useStore((s) => s.query);
   const lanes = useStore((s) => s.lanes);
   const fusion = useStore((s) => s.fusion);
+  const topK = useStore((s) => s.topK);
   const setResults = useStore((s) => s.setResults);
   const setStatus = useStore((s) => s.setStatus);
   const setError = useStore((s) => s.setError);
@@ -29,7 +30,7 @@ export function useSearch(): () => Promise<void> {
     const req: QueryRequest = {
       query_vi: q,
       lanes,
-      top_k: DEFAULT_TOP_K,
+      top_k: topK,
       fusion,
       rrf_k: DEFAULT_RRF_K,
     };
@@ -51,5 +52,5 @@ export function useSearch(): () => Promise<void> {
       setError(e instanceof Error ? e.message : String(e));
       setStatus("error");
     }
-  }, [query, lanes, fusion, channel, api, setResults, setStatus, setError, setWsState, pushHistory]);
+  }, [query, lanes, fusion, topK, channel, api, setResults, setStatus, setError, setWsState, pushHistory]);
 }

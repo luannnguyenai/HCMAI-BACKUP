@@ -60,6 +60,18 @@ export interface IssueResponse {
   fallback_path: string | null;
 }
 
+export interface ReadyStatus {
+  ready: boolean;
+  collection_loaded: boolean;
+  row_count: number;
+  thumbnails_present: boolean;
+  lanes_available: Lane[];
+}
+
 // Default request knobs (SPEC-0026 SS 3 defaults).
 export const DEFAULT_TOP_K = 48;
 export const DEFAULT_RRF_K = 60;
+
+// Operator-selectable result page sizes (SPEC-0027 SS 4). 48 is the SPEC-0026
+// default and stays the initial selection so a query sends top_k=48 by default.
+export const TOP_K_OPTIONS = [24, 48, 96] as const;

@@ -2,6 +2,8 @@
 import type { Lane } from "../api/types";
 import { useStore } from "../store";
 
+// siglip2 is online today; metaclip2 is wired and future-proofed (selecting it
+// flips fusion single -> rrf). Other lanes are offline-only and not shown.
 const ALL_LANES: Lane[] = ["siglip2", "metaclip2"];
 
 export function LaneSelector() {
@@ -18,21 +20,41 @@ export function LaneSelector() {
   };
 
   return (
-    <fieldset className="flex gap-3 items-center" data-testid="lane-selector">
+    <fieldset className="flex items-center gap-1.5" data-testid="lane-selector">
       <legend className="sr-only">Chon lane</legend>
-      {ALL_LANES.map((lane) => (
-        <label key={lane} className="flex gap-1 items-center">
-          <input
-            type="checkbox"
-            data-testid={`lane-${lane}`}
-            checked={lanes.includes(lane)}
-            onChange={() => toggle(lane)}
-          />
-          {lane}
-        </label>
-      ))}
-      <span data-testid="fusion-mode" className="text-sm opacity-70">
-        fusion: {fusion}
+      <span className="label mr-1">lane</span>
+      {ALL_LANES.map((lane) => {
+        const active = lanes.includes(lane);
+        return (
+          <label
+            key={lane}
+            className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              active
+                ? "border-accent/50 bg-accent/10 text-accent-strong"
+                : "border-line bg-ink-900 text-fg-muted hover:border-line-strong hover:text-fg"
+            }`}
+          >
+            <input
+              type="checkbox"
+              data-testid={`lane-${lane}`}
+              className="sr-only"
+              checked={active}
+              onChange={() => toggle(lane)}
+            />
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${active ? "bg-accent" : "bg-fg-faint"}`}
+              aria-hidden="true"
+            />
+            <span className="font-mono">{lane}</span>
+          </label>
+        );
+      })}
+      <span
+        data-testid="fusion-mode"
+        className="ml-1 font-mono text-[11px] text-fg-faint"
+        title="Hai lane -> RRF, mot lane -> single"
+      >
+        fusion: <span className="text-fg-muted">{fusion}</span>
       </span>
     </fieldset>
   );

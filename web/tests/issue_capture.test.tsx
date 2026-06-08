@@ -19,7 +19,12 @@ describe("AC6: issue capture", () => {
     });
     renderApp(<App />, services);
 
+    // The report control opens a form; submitting it POSTs the IssueReport.
     fireEvent.click(screen.getByTestId("report-issue-btn"));
+    fireEvent.change(screen.getByTestId("issue-title"), {
+      target: { value: "ket qua khong lien quan" },
+    });
+    fireEvent.submit(screen.getByTestId("issue-form"));
 
     await waitFor(() => expect(services.api.reportIssue).toHaveBeenCalledTimes(1));
     const report = services.api.reportIssue.mock.calls[0][0];

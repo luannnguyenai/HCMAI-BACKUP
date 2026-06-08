@@ -1,7 +1,7 @@
 // Implements SPEC-0027 SS 3 (Zustand UI state).
 import { create } from "zustand";
 
-import type { FrameDetail, FusionMode, Lane, RankedFrame } from "./api/types";
+import { DEFAULT_TOP_K, type FrameDetail, type FusionMode, type Lane, type RankedFrame } from "./api/types";
 
 export type WsState = "connected" | "reconnecting";
 export type Status = "idle" | "loading" | "error";
@@ -12,6 +12,7 @@ export interface UiState {
   query: string;
   lanes: Lane[];
   fusion: FusionMode;
+  topK: number;
   results: RankedFrame[];
   selectedPk: string | null;
   detail: FrameDetail | null;
@@ -23,10 +24,13 @@ export interface UiState {
 
   setQuery: (q: string) => void;
   setLanes: (lanes: Lane[]) => void;
+  setTopK: (k: number) => void;
   setResults: (results: RankedFrame[], tookMs: number) => void;
   setStatus: (s: Status) => void;
   setError: (e: string | null) => void;
   selectFrame: (pk: string | null) => void;
+  // Step selection by +1 / -1 through the current result list (detail nav).
+  stepSelection: (delta: number) => void;
   setWsState: (w: WsState) => void;
   pushHistory: (q: string) => void;
   reset: () => void;
@@ -36,6 +40,7 @@ export const INITIAL_STATE = {
   query: "",
   lanes: ["siglip2"] as Lane[],
   fusion: "single" as FusionMode,
+  topK: DEFAULT_TOP_K,
   results: [] as RankedFrame[],
   selectedPk: null as string | null,
   detail: null as FrameDetail | null,
@@ -56,10 +61,19 @@ export const useStore = create<UiState>((set) => ({
   ...INITIAL_STATE,
   setQuery: (query) => set({ query }),
   setLanes: (lanes) => set({ lanes, fusion: deriveFusion(lanes) }),
+  setTopK: (topK) => set({ topK }),
   setResults: (results, tookMs) => set({ results, tookMs, error: null }),
   setStatus: (status) => set({ status }),
   setError: (error) => set({ error }),
   selectFrame: (selectedPk) => set({ selectedPk }),
+  stepSelection: (delta) =>
+    set((s) => {
+      if (s.results.length === 0) return {};
+      const idx = s.results.findIndex((r) => r.pk === s.selectedPk);
+      if (idx === -1) return { selectedPk: s.results[0].pk };
+      const next = Math.min(Math.max(idx + delta, 0), s.results.length - 1);
+      return { selectedPk: s.results[next].pk };
+    }),
   setWsState: (wsState) => set({ wsState }),
   pushHistory: (q) =>
     set((s) => ({
