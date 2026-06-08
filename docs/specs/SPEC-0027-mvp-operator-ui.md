@@ -43,10 +43,14 @@ spec introduces the frontend toolchain as a net-new addition under `web/`.
 
 ### 2.1 In scope
 - A single-page React app (`web/`) with: a Vietnamese query box, a lane selector
-  (siglip2 / metaclip2, single or RRF), a virtualised ranked keyframe grid using
-  thumbnails (ADR-0015), a frame-detail view (full image + `video_id`/`frame_id`,
-  `youtube_url`, `description`, OCR/ASR snippet when available), and an in-UI
-  "report issue" control.
+  (siglip2 / metaclip2, single or RRF), a `top_k` page-size control, a virtualised
+  ranked keyframe grid using thumbnails (ADR-0015), a frame-detail view (full
+  image + `video_id`/`frame_id`, `youtube_url`, `description`, OCR/ASR snippet when
+  available), an in-UI "report issue" control, and a live readiness indicator that
+  polls the SPEC-0026 `/readyz` endpoint.
+- Operator keyboard ergonomics: the search box is focused on load, Enter submits,
+  Esc closes the active overlay, and arrow keys step the selection while the
+  frame-detail view is open.
 - A typed API client and WebSocket client mirroring the SPEC-0026 schemas.
 - Client-side screenshot capture for the issue report (browser canvas of the
   current UI), bundled with the query + lanes + returned frame ids + timestamp.
@@ -121,7 +125,15 @@ export interface IssueReport {
   returned_frame_ids: string[];   // pks shown when the report was filed
   screenshot_png_b64: string;
   client_timestamp: string;       // ISO-8601
-  note?: string;
+  note?: string;                  // form title + severity + description folded in
+}
+
+export interface ReadyStatus {     // mirror of SPEC-0026 ReadyStatus
+  ready: boolean;
+  collection_loaded: boolean;
+  row_count: number;
+  thumbnails_present: boolean;
+  lanes_available: Lane[];
 }
 ```
 
@@ -132,6 +144,7 @@ export interface ApiClient {
   query(req: QueryRequest): Promise<QueryResponse>;
   frameDetail(pk: string): Promise<FrameDetail>;
   reportIssue(report: IssueReport): Promise<{ issue_url: string | null }>;
+  readiness(): Promise<ReadyStatus>;   // polls GET /readyz (200 ready / 503 not)
 }
 
 // web/src/api/ws.ts
@@ -146,6 +159,7 @@ export interface UiState {
   query: string;
   lanes: Lane[];
   fusion: FusionMode;
+  topK: number;             // operator-selectable page size; default 48
   results: RankedFrame[];
   selectedPk: string | null;
   detail: FrameDetail | null;
@@ -158,24 +172,36 @@ export interface UiState {
 
 - **Run a query**: the operator types Vietnamese text and submits (Enter or the
   search button); the app sends a `QueryRequest` over the WebSocket channel and
-  renders the returned `results` in the grid, with `took_ms` shown. An empty
-  query is not sent (the button is disabled / Enter is a no-op).
+  renders the returned `results` in the grid, with `took_ms` and the result count
+  shown. An empty query is not sent (the button is disabled / Enter is a no-op).
 - **Lane selection**: the operator picks one lane (single) or two lanes
   (switching `fusion` to `rrf`); the choice is sent in the next `QueryRequest`.
+- **Page size**: a `top_k` control selects how many results to request (24 / 48 /
+  96; default 48 = the SPEC-0026 default), sent on the next `QueryRequest`.
+- **Readiness indicator**: the top bar polls `GET /readyz` and shows a live status
+  pill (green "san sang - <row_count> khung hinh" when ready, red when the server
+  is unreachable or the collection / thumbnails are not loaded). It is a
+  read-only health signal; it never blocks a query.
 - **Grid render**: results render as a virtualised thumbnail grid - only visible
   thumbnails mount (react-window or react-virtuoso, ADR-0004) - using each
   `RankedFrame.thumb_url`. Empty results show an explicit "no results" state, not
   a blank grid.
-- **Frame detail**: clicking a thumbnail selects it and loads `FrameDetail` via
-  REST; the detail view shows the full image (`full_url`), `video_id`/`frame_id`,
-  `youtube_url` link, `description`, OCR/ASR snippet when present (hidden when
-  `null`), and prev/next neighbour thumbnails.
-- **Report an issue**: the "report issue" control captures a PNG screenshot of
-  the current UI (browser canvas), bundles it with the current query, lanes,
-  fusion, the `pk`s currently shown, and an ISO-8601 client timestamp into an
-  `IssueReport`, optionally with a free-text note, and POSTs it to
-  `/api/issues`. On success it shows the returned issue URL (or a "saved locally"
-  message on fallback). The control is reachable without leaving the grid.
+- **Frame detail**: clicking a thumbnail selects it and opens a modal detail view
+  that loads `FrameDetail` via REST; it shows the full image (`full_url`),
+  `video_id`/`frame_id`, the fused `score` and `per_lane` scores (from the result
+  list), a "copy pk" control, `youtube_url` link, `description`, OCR/ASR snippet
+  when present (hidden when `null`), neighbour pks, and prev/next navigation
+  through the result list. Esc closes the modal; arrow keys move the selection.
+- **Report an issue**: the "report issue" control opens a small form (title,
+  severity, free-text description) showing the auto-attached context (current
+  query, lanes, fusion, `top_k`, selected `pk`, result count). Submitting it
+  captures a PNG screenshot of the current UI (browser canvas) and bundles it with
+  the current query, lanes, fusion, the `pk`s currently shown, and an ISO-8601
+  client timestamp into an `IssueReport` (the form title + severity + description
+  are folded into `note`, since the SPEC-0026 `IssueReport` schema is
+  `extra="forbid"`), and POSTs it to `/api/issues`. On success it shows the
+  returned issue URL (or a "saved locally" message on fallback). The control is
+  reachable from the top bar without leaving the grid.
 - **WebSocket loss**: if the channel drops, the client shows a reconnecting state
   and falls back to the REST `query` endpoint so a query still completes.
 - **Error**: a backend error (422 / 5xx / WS error frame) surfaces a visible
@@ -267,3 +293,4 @@ export interface UiState {
 | 2026-06-05 | spec author (AI, user-directed) | Created (Draft). MVP React + WebSocket KIS console (query box, lane selector, virtualised thumbnail grid, frame detail, in-UI issue capture) as the proposal-06 subset, served by the SPEC-0026 API (ADR-0004 stack, ADR-0013 shared server, ADR-0015 thumbnails). TRAKE/QA/planner/verification-bar/novice-mode out of scope. Awaiting human approval before code. |
 | 2026-06-07 | team lead (approval) | Status Draft -> Approved (human approval gate per AGENTS.md, PR #24). Q1 resolved: grid virtualiser = `react-virtuoso`. Q2 resolved: screenshot lib = `html2canvas`. Q3 resolved: keep a lightweight in-memory last-10 query history. Q4 resolved: render OCR/ASR rows conditionally now (null on proxy). Implementation begins on `spec/0026-mvp-serving-api`. |
 | 2026-06-08 | implementer (AI, user-directed) | Status Approved -> Implemented. Shipped `web/` (Vite + React 18 + TS + Tailwind, Zustand store, TanStack Query frame detail, `react-virtuoso` grid, `html2canvas` issue capture, typed REST client + WS channel with REST fallback). AC1-AC7 covered by `web/tests/{query_flow,empty_query,grid_virtualisation,frame_detail,lane_select,issue_capture,ws_fallback}.test.tsx` (Vitest + Testing Library, 8 passing). `npm run build` + typecheck green. |
+| 2026-06-09 | implementer (AI, user-directed) | Implemented the polished operator KIS console UI: the prior build was a bare, unstyled skeleton (no design system, no readiness indicator, no `top_k` control, no detail modal, no keyboard ergonomics) that presented as a near-empty page. Added a dark console design system (Tailwind tokens, IBM Plex type with system fallback), a top bar with a live `/readyz` readiness pill (new `ApiClient.readiness()` + `ReadyStatus` type), a `top_k` page-size control (added `topK` to the store), a restyled virtualised grid with rank/score/id overlays + skeleton/empty/error states, a frame-detail modal (full image, `score`/`per_lane`, copy-pk, prev/next, Esc + arrow nav), and an issue-capture modal form (title/severity/description folded into `note` to keep the SPEC-0026 schema intact). AC1-AC7 still hold; `issue_capture` and `test/utils` updated for the modal/form component API (coverage preserved). typecheck + 8 Vitest tests + `npm run build` green; verified visually via screenshots. |

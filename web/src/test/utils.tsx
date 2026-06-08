@@ -11,6 +11,7 @@ import type {
   IssueResponse,
   QueryResponse,
   RankedFrame,
+  ReadyStatus,
 } from "../api/types";
 import { ServicesProvider, type Services } from "../services";
 
@@ -39,6 +40,17 @@ export function makeResponse(n: number, over?: Partial<QueryResponse>): QueryRes
   };
 }
 
+export function makeReady(over?: Partial<ReadyStatus>): ReadyStatus {
+  return {
+    ready: true,
+    collection_loaded: true,
+    row_count: 121457,
+    thumbnails_present: true,
+    lanes_available: ["siglip2", "metaclip2"],
+    ...over,
+  };
+}
+
 export function makeDetail(over?: Partial<FrameDetail>): FrameDetail {
   return {
     pk: "vid01_0001",
@@ -61,6 +73,7 @@ export interface MockServices extends Services {
     query: ReturnType<typeof vi.fn>;
     frameDetail: ReturnType<typeof vi.fn>;
     reportIssue: ReturnType<typeof vi.fn>;
+    readiness: ReturnType<typeof vi.fn>;
   } & ApiClient;
   channel: { send: ReturnType<typeof vi.fn>; onError: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> } & QueryChannel;
   captureScreenshot: ReturnType<typeof vi.fn>;
@@ -74,15 +87,17 @@ export function makeServices(over?: {
   channelSend?: (...args: unknown[]) => Promise<QueryResponse>;
   screenshot?: string;
   now?: string;
+  readiness?: ReadyStatus;
 }): MockServices {
   const query = vi.fn(async () => over?.query ?? makeResponse(3));
   const frameDetail = vi.fn(async () => over?.frameDetail ?? makeDetail());
   const reportIssue = vi.fn(
     async () => over?.reportIssue ?? ({ issue_url: "https://github.com/x/y/issues/1", fallback_path: null } as IssueResponse),
   );
+  const readiness = vi.fn(async () => over?.readiness ?? makeReady());
   const send = vi.fn(over?.channelSend ?? (async () => over?.query ?? makeResponse(3)));
   return {
-    api: { query, frameDetail, reportIssue },
+    api: { query, frameDetail, reportIssue, readiness },
     channel: { send, onError: vi.fn(), close: vi.fn() },
     captureScreenshot: vi.fn(async () => over?.screenshot ?? "iVBORw0KGgoAAAANS"),
     now: vi.fn(() => over?.now ?? "2026-06-07T12:00:00.000Z"),

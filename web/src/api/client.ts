@@ -5,6 +5,7 @@ import type {
   IssueResponse,
   QueryRequest,
   QueryResponse,
+  ReadyStatus,
 } from "./types";
 
 export interface ApiClient {
@@ -12,6 +13,8 @@ export interface ApiClient {
   query(req: QueryRequest): Promise<QueryResponse>;
   frameDetail(pk: string): Promise<FrameDetail>;
   reportIssue(report: IssueReport): Promise<IssueResponse>;
+  // Readiness poll (SPEC-0026 GET /readyz); 503 before the collection loads.
+  readiness(): Promise<ReadyStatus>;
 }
 
 const SECRET_HEADER = "X-AIC-Secret";
@@ -62,6 +65,13 @@ export function createApiClient(opts: ApiClientOptions = {}): ApiClient {
         body: JSON.stringify(report),
       });
       return asJson<IssueResponse>(resp);
+    },
+    async readiness() {
+      // /readyz returns a ReadyStatus body on both 200 (ready) and 503 (not),
+      // so parse the JSON regardless of status rather than treating 503 as an
+      // error (SPEC-0026 SS 4 startup/readiness).
+      const resp = await doFetch(url("/readyz"), { headers: headers(opts.secret) });
+      return (await resp.json()) as ReadyStatus;
     },
   };
 }
