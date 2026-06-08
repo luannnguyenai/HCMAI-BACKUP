@@ -223,6 +223,7 @@ bin/index search  --uri URI --collection keyframes --field siglip2
 - **AC6**: an `.npy` whose dim disagrees with the field's declared dim raises an error naming field + expected + actual dim. Verified in `tests/unit/test_milvus_ingest_AC6.py`.
 - **AC7**: querying with a stored document's own vector returns that document at rank 1 with `score` within `1.0 +- 1e-3` (IP-on-unit-vectors == cosine). Verified in `tests/unit/test_milvus_cosine_AC7.py`.
 - **AC8**: spec + module docstrings document the offline-ingest / online-query split (ADR-0003) and the `qwen3vl` offline-only-doc-lane asymmetry (ADR-0012). Verified by inspection, encoded as a lightweight assertion in `tests/unit/test_milvus_docs_AC8.py` (no Milvus needed).
+- **AC9**: a multi-vector collection persisted by one process and reopened cold by a fresh process (the offline ingest -> online serve pattern) loads and searches each dense field at its own declared dim (not the first field's dim). Verified in `tests/unit/test_milvus_multivector_reload_AC9.py` (Milvus Lite, driven as two sequential subprocesses). This is the regression guard for the milvus-lite 3.0 multi-vector reload defect (SS 12); it must stay green under the dependency pin.
 
 ## 6. Non-functional requirements
 
@@ -235,7 +236,7 @@ bin/index search  --uri URI --collection keyframes --field siglip2
 ## 7. Dependencies
 
 - **Internal**: SPEC-0004 (producer of `<enc>.npy` + `<enc>.manifest.jsonl`); SPEC-0001 (`Submission`); SPEC-0025 (`DenseRetriever`, the brute-force precedent this replaces with ANN).
-- **External**: `pymilvus[milvus_lite] >= 2.5` (resolves to pymilvus 3.0 + milvus-lite 3.0 as of 2026-06-05), exposed two ways: a runtime `[project.optional-dependencies] index` extra (`uv sync --extra index`) **and** the `dev` dependency group, so CI installs it and runs the AC1-AC7 tests against a real embedded instance. Note: pymilvus 3.0 unbundled the embedded backend into the `milvus_lite` sub-extra, so it must be requested explicitly (`pymilvus[milvus_lite]`); a plain `pymilvus` install raises `milvus-lite is required for local database connections`. **Dev/CI uses Milvus Lite** (the embedded, file-backed mode: CPU-only, no network, FLAT index; it spawns a loopback gRPC server, so a sandbox that forbids binding `127.0.0.1` will skip the tests - CI does not). **The real ingest uses Milvus standalone (docker)** on the lease box (Q-a RESOLVED) - Lite's index/metric support is a subset, so CI exercises FLAT while production uses HNSW. The store selects the index type from the `uri`: FLAT for a local Lite path, HNSW for an `http(s)://` endpoint.
+- **External**: `pymilvus[milvus_lite] >= 2.5, < 3` **plus** a direct `milvus-lite >= 2.4, < 3` pin and `setuptools < 81`, exposed two ways: a runtime `[project.optional-dependencies] index` extra (`uv sync --extra index`) **and** the `dev` dependency group, so CI installs it and runs the AC tests against a real embedded instance. The lockfile resolves to **pymilvus 2.6.x + milvus-lite 2.5.x** (was pymilvus 3.0 + milvus-lite 3.0). The `< 3` ceiling is the SS 12 fix: the milvus-lite 3.0 engine cross-wires multi-vector FLOAT_VECTOR collections on cold cross-process reload. The direct `milvus-lite < 3` pin is needed because the `pymilvus[milvus_lite]` extra leaves the engine unbounded (even pymilvus 2.5/2.6 otherwise pull milvus-lite 3.0); `setuptools < 81` because milvus-lite 2.x imports `pkg_resources`, removed in setuptools 81. Note: pymilvus unbundled the embedded backend into the `milvus_lite` sub-extra, so it must be requested explicitly (`pymilvus[milvus_lite]`); a plain `pymilvus` install raises `milvus-lite is required for local database connections`. **Dev/CI uses Milvus Lite** (the embedded, file-backed mode: CPU-only, no network, FLAT index; it spawns a loopback gRPC server, so a sandbox that forbids binding `127.0.0.1` will skip the tests - CI does not). **The real ingest uses Milvus standalone (docker)** on the lease box (Q-a RESOLVED) - Lite's index/metric support is a subset, so CI exercises FLAT while production uses HNSW. The store selects the index type from the `uri`: FLAT for a local Lite path, HNSW for an `http(s)://` endpoint. The pinned client (pymilvus 2.x) also matches the SS 11.8-validated standalone server (Milvus 2.5.27).
 - **Data**: the R2-banked indexes (ADR-0011): `index/aic2025-proxy-3enc-20260604/<enc>/<video>.{npy,manifest.jsonl}` (siglip2/metaclip2/qwen3vl, 546 videos) and `index/aic2025-proxy-qwen8b-20260604/` (qwen8b). Organiser `youtube_url` / `description` / OD tags land with the June-25 AIC2026 corpus; for the proxy these scalar fields are sparse/absent and `metadata` is optional.
 
 ## 8. Test plan
@@ -248,6 +249,7 @@ bin/index search  --uri URI --collection keyframes --field siglip2
   - `test_milvus_submission_adapter_AC5.py` - Hit -> Submission mapping.
   - `test_milvus_ingest_AC6.py` - dim-mismatch error.
   - `test_milvus_cosine_AC7.py` - self-query rank-1 score ~1.0; HNSW-vs-FLAT recall on a fixture.
+  - `test_milvus_multivector_reload_AC9.py` - multi-vector cold cross-process reload (subprocess; SS 12 regression guard). Marked `integration` (spawns subprocesses); skips if Lite cannot bind loopback.
 - **Integration (lease, not CI)**: `bin/index ingest-all` over the real 546-video proxy on Milvus standalone; record ingest wall-clock + a query-latency sample in SS 10.
 
 ## 9. Open questions
@@ -461,7 +463,72 @@ NFR summary (stable 2.5.27):
 Box note: the 2.5.27 container is **left running** (it is the deployment); the
 foreign GPU 0 workload was untouched; eval used GPU 1 and is freed.
 
-## 12. Changelog
+## 12. Milvus Lite multi-vector reload regression (milvus-lite 3.0)
+
+Surfaced during MVP deploy and reproduced locally 2026-06-08. The committed
+lockfile then resolved `pymilvus[milvus_lite] >= 2.5` to **pymilvus 3.0.0 +
+milvus-lite 3.0**. On that engine a Lite collection with **more than one**
+`FLOAT_VECTOR` field, persisted by one process and reopened **cold by a fresh
+process** (the offline-ingest -> online-serve pattern: `bin/index ingest-all`
+writes the `.db`, then `milvus_store.search` calls `load_collection` in the
+serving process), cross-wires its per-field vector segments on load. The first
+declared field keeps its dim; every later field is reloaded at the first
+field's dim. The failure is one of:
+
+- `load_collection` raises `MilvusException: loaded index dim 1024 != expected
+  dim 1152` (the exact deploy symptom), or
+- `load_collection` "succeeds" but a per-field `search` raises a matmul
+  dimension mismatch (`size 1152 is different from 1024`).
+
+### 12.1 Scope of the defect (reproduced)
+
+| condition | result |
+|---|---|
+| 1 dense field, cold cross-process reload | OK |
+| >1 dense field, same process (build + search) | OK |
+| >1 dense field, same process, new `MilvusClient` after `close()` | OK |
+| >1 dense field, **cold fresh process** reload | **BROKEN** (cross-wired) |
+
+So it is a **cold on-disk de-serialisation defect**, not a schema or ingest
+error: `describe_collection` / `describe_index` report the correct per-field
+dims after the build, single-vector collections are unaffected, and an
+in-process reopen keeps the correct segments in memory and hides it.
+
+### 12.2 Root cause: a milvus-lite 3.0 regression, not our code
+
+Confirmed by holding our code constant (the real `MilvusKeyframeStore`
+`ensure_collection` / `ingest` / `search` path) and varying only the engine:
+
+| client / engine | multi-vector cold reload |
+|---|---|
+| pymilvus 2.5.18 / milvus-lite 2.4.12 | OK |
+| pymilvus 2.5.18 / milvus-lite 2.5.1 | OK |
+| pymilvus 2.6.15 / milvus-lite 2.5.1 (now pinned) | OK |
+| pymilvus 3.0.0 / milvus-lite 3.0 (was) | BROKEN |
+
+It is not fixable by changing how we build the collection: explicit per-field
+`index_name`, building each index via a separate `create_index` after insert,
+passing `params={"dim": dim}`, and `flush()` before reload were all tried on
+milvus-lite 3.0 and all still cross-wire. milvus-lite 3.0 is the newest release
+on PyPI, so there is no newer engine to upgrade to; the working engines are the
+**older** 2.4.x / 2.5.x line. Standalone Milvus is unaffected (SS 11.3 / 11.8
+ingested 546 videos x 3 fields and searched every lane).
+
+### 12.3 Remediation: pin the engine below 3.0
+
+Pin `pymilvus[milvus_lite] >= 2.5, < 3`, `milvus-lite >= 2.4, < 3`, and
+`setuptools < 81` (SS 7). This is the smallest change that keeps all existing
+in-process AC tests green (multi-vector Lite works fine in-process and is relied
+on by SPEC-0006 AC1/AC2/AC3 and the SPEC-0026 serving fixtures), genuinely fixes
+the cross-process serve path, and aligns the committed client (pymilvus 2.x)
+with the SS 11.8-validated standalone server (Milvus 2.5.27). A build-time guard
+forbidding multi-vector on Lite was rejected: the premise would be false
+(Lite 2.x supports multi-vector cross-process), and it would break the working
+in-process multi-lane coverage in two specs. AC9 (`test_milvus_multivector_
+reload_AC9.py`) drives the real store across two subprocesses and fails on
+milvus-lite 3.0 / passes under the pin, guarding against a future un-pinning.
+
+## 13. Changelog
 
 | Date | Author | Change |
 |---|---|---|
@@ -471,3 +538,4 @@ foreign GPU 0 workload was untouched; eval used GPU 1 and is freed.
 | 2026-06-05 | implementer (user-directed) | Fixed the SPEC-0004 <-> SPEC-0006 frame_id/PK contract (SS 11.2 RESOLVED): the store now derives `video_id` from the source (npy filename stem or explicit `ingest(video_id=...)` arg) and composes a global primary key `pk = "<video_id>_<frame_id>"`; the per-video `frame_id` and `video_id` are kept as scalar fields. Removed `parse_video_id`. Added `pk` to `KeyframeMeta`/`Hit`; `hits_to_submissions` now carries `pk` as `Submission.frame_id`. Touched `aic2026/index/{milvus_schema,models,milvus_store,__init__}.py` + `bin/index` CLI (passes `--video` as `video_id`). Updated SS 1, SS 2.1, SS 3, SS 4, AC2, AC5 and the AC2/AC5 unit tests + the SPEC-0004-shaped fixture (per-video frame_id, video in the npy filename). All 18 Milvus Lite tests green (213 unit total). |
 | 2026-06-05 | implementer (user-directed) | Added SS 11.8: stable Milvus 2.5.27 re-run (client pymilvus 2.5.18, lockfile pin 3.0.0 untouched/uncommitted) on the H200 lease. Re-ingested the **unmodified** SPEC-0004 `index/` tree via the fixed `bin/index ingest-all` (no `index_milvus/` patch) - 546 videos / 121457 rows in 64 s, validating the Part 1 fix on real data. `efSearch` is honoured on 2.5.x (server rejects `ef < top_k`; recall moves with ef, unlike the byte-identical beta sweep). Recall@200 >= 0.95 MET at `ef=1024` for all three lanes (siglip2 0.969, metaclip2 0.968, qwen3vl 0.985; qwen3vl from ef=256), p95 latency 16.6-51.1 ms - the 11.5 recall deferral is resolved. Flagged the `HnswParams.ef_search=128 < top_k=200` default as a follow-up (2.5.x requires ef >= top_k). Artifacts banked to R2 `eval/milvus-proxy-25x-20260605/`. Uncommitted pending review. |
 | 2026-06-05 | implementer (user-directed) | Settled the SS 11.8 operating-point follow-up: raised the `HnswParams.ef_search` default 128 -> **1024** (the validated recall-passing point) and added an `ef = max(ef, top_k)` clamp in `MilvusKeyframeStore.search` so the standalone 2.5.x `ef >= top_k` constraint is always satisfied. Updated SS 3, SS 6 (latency + recall NFR at efSearch=1024), SS 10, and the SS 11.8 caveat (now RESOLVED). Code-only behaviour change in `milvus_schema.py` + `milvus_store.py`; Milvus Lite (FLAT) ignores ef so the unit tests are unaffected. |
+| 2026-06-08 | implementer (user-directed) | Fixed the multi-vector Milvus Lite cold cross-process reload defect hit during MVP deploy (new SS 12). Root cause: a **milvus-lite 3.0 engine regression** - a Lite collection with >1 `FLOAT_VECTOR` field, reopened by a fresh process, cross-wires its per-field segments and `load_collection` raises `loaded index dim 1024 != expected dim 1152`. Reproduced locally against the real store; held our code constant and varied only the engine (milvus-lite 2.4.12 / 2.5.1 reload correctly, 3.0 does not); construction variants (named index, separate create_index, dim param, flush) do not help; single-vector and in-process multi-vector are unaffected. Remediation (SS 12.3): pinned `pymilvus[milvus_lite] >= 2.5, < 3` + `milvus-lite >= 2.4, < 3` + `setuptools < 81` in the `index` extra and `dev` group (SS 7); lockfile regenerated to pymilvus 2.6.15 + milvus-lite 2.5.1 (also matches the SS 11.8 standalone server 2.5.27). Added AC9 + `tests/unit/test_milvus_multivector_reload_AC9.py` (subprocess regression guard: fails on milvus-lite 3.0, passes under the pin) and its SS 8 entry. No store/schema logic change; all existing in-process AC tests stay green. |

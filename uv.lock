@@ -34,7 +34,9 @@ embedding = [
     { name = "transformers" },
 ]
 index = [
+    { name = "milvus-lite" },
     { name = "pymilvus", extra = ["milvus-lite"] },
+    { name = "setuptools" },
 ]
 serving = [
     { name = "fastapi" },
@@ -52,12 +54,14 @@ train = [
 [package.dev-dependencies]
 dev = [
     { name = "fastapi" },
+    { name = "milvus-lite" },
     { name = "moto", extra = ["server"] },
     { name = "pyarrow" },
     { name = "pymilvus", extra = ["milvus-lite"] },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "setuptools" },
 ]
 
 [package.metadata]
@@ -70,14 +74,16 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'embedding'", specifier = ">=0.24" },
     { name = "huggingface-hub", marker = "extra == 'train'", specifier = ">=0.24" },
     { name = "jinja2", specifier = ">=3.1" },
+    { name = "milvus-lite", marker = "extra == 'index'", specifier = ">=2.4,<3" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "open-clip-torch", marker = "extra == 'embedding'", specifier = ">=2.32" },
     { name = "pillow", marker = "extra == 'embedding'", specifier = ">=10" },
     { name = "pyarrow", marker = "extra == 'train'", specifier = ">=16" },
     { name = "pydantic", specifier = ">=2.7" },
-    { name = "pymilvus", extras = ["milvus-lite"], marker = "extra == 'index'", specifier = ">=2.5" },
+    { name = "pymilvus", extras = ["milvus-lite"], marker = "extra == 'index'", specifier = ">=2.5,<3" },
     { name = "sentencepiece", marker = "extra == 'embedding'", specifier = ">=0.2" },
     { name = "sentencepiece", marker = "extra == 'train'", specifier = ">=0.2" },
+    { name = "setuptools", marker = "extra == 'index'", specifier = "<81" },
     { name = "torch", marker = "extra == 'embedding'", specifier = ">=2.4" },
     { name = "torch", marker = "extra == 'train'", specifier = ">=2.4" },
     { name = "transformers", marker = "extra == 'embedding'", specifier = ">=4.45" },
@@ -90,12 +96,14 @@ provides-extras = ["embedding", "train", "index", "serving"]
 [package.metadata.requires-dev]
 dev = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "milvus-lite", specifier = ">=2.4,<3" },
     { name = "moto", extras = ["server"], specifier = ">=5" },
     { name = "pyarrow", specifier = ">=16" },
-    { name = "pymilvus", extras = ["milvus-lite"], specifier = ">=2.5" },
+    { name = "pymilvus", extras = ["milvus-lite"], specifier = ">=2.5,<3" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=5" },
     { name = "ruff", specifier = ">=0.6" },
+    { name = "setuptools", specifier = "<81" },
 ]
 
 [[package]]
@@ -848,21 +856,6 @@ wheels = [
 ]
 
 [[package]]
-name = "faiss-cpu"
-version = "1.14.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy", marker = "sys_platform != 'win32'" },
-    { name = "packaging", marker = "sys_platform != 'win32'" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c8/8b/5d2cd7c9fd60bc4d1ca6e9f5e8b0eb57254a7b301daaa12d5853fdf48afe/faiss_cpu-1.14.2-cp310-abi3-macosx_14_0_arm64.whl", hash = "sha256:a20011b8a97318e6d5e29143a773277ca71f1c33140024aeec91f05ad56cdd04", size = 4621203, upload-time = "2026-05-22T19:58:27.415Z" },
-    { url = "https://files.pythonhosted.org/packages/84/b1/05876aa7ceafd67a8c53667f574c0354e50ebadfdaf0632d7d9f5c80fffe/faiss_cpu-1.14.2-cp310-abi3-macosx_15_0_x86_64.whl", hash = "sha256:6ba528b5803fe5206bbb38e6ea2c537de0d1482a47c5765982af4e4a48c135e2", size = 6681426, upload-time = "2026-05-22T19:58:29.193Z" },
-    { url = "https://files.pythonhosted.org/packages/35/b4/d130a1908ad548671cd5ee9a1b537c7d3753cfdf0b2b134f3c10ccc6b537/faiss_cpu-1.14.2-cp310-abi3-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:b340c33212351f04d4f167cb7b22c9e756705a634d3b7b58987651f3ba1f6217", size = 9592827, upload-time = "2026-05-22T19:58:30.772Z" },
-    { url = "https://files.pythonhosted.org/packages/7f/66/108f7075591b84852a6b285a81922e773c1c6d3b2c45da8ec4822f1bfab4/faiss_cpu-1.14.2-cp310-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ec4784d9a14973f2eead3a3480e6d14e74253b234e2c12717d4319f21dfadfcd", size = 18234781, upload-time = "2026-05-22T19:58:33.268Z" },
-]
-
-[[package]]
 name = "fastapi"
 version = "0.136.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1508,17 +1501,16 @@ wheels = [
 
 [[package]]
 name = "milvus-lite"
-version = "3.0"
+version = "2.5.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "faiss-cpu", marker = "sys_platform != 'win32'" },
-    { name = "grpcio", marker = "sys_platform != 'win32'" },
-    { name = "numpy", marker = "sys_platform != 'win32'" },
-    { name = "pyarrow", marker = "sys_platform != 'win32'" },
+    { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a3/9a/d80d260e6fe1246818a8ef782c374ba9c6ca46ca3b987c14eabe914ef805/milvus_lite-3.0.tar.gz", hash = "sha256:2c35d0d046b1faae3402cde1fb73d65f51ee8c6aba65f54de1dda46f7bb18b9b", size = 589749, upload-time = "2026-05-13T07:14:05.827Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/59/42/dee08ae3bfc1731572f193d00b248c9370b0b9dff12becb0ffd8b2ee8d56/milvus_lite-3.0-py3-none-any.whl", hash = "sha256:d9a094eab84bdaa4253da3721482282c939da1cce6f4e1759f947e8d3e53406e", size = 230490, upload-time = "2026-05-13T07:14:00.816Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/b2/acc5024c8e8b6a0b034670b8e8af306ebd633ede777dcbf557eac4785937/milvus_lite-2.5.1-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:6b014453200ba977be37ba660cb2d021030375fa6a35bc53c2e1d92980a0c512", size = 27934713, upload-time = "2025-06-30T04:23:37.028Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/2e/746f5bb1d6facd1e73eb4af6dd5efda11125b0f29d7908a097485ca6cad9/milvus_lite-2.5.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:a2e031088bf308afe5f8567850412d618cfb05a65238ed1a6117f60decccc95a", size = 24421451, upload-time = "2025-06-30T04:23:51.747Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/cf/3d1fee5c16c7661cf53977067a34820f7269ed8ba99fe9cf35efc1700866/milvus_lite-2.5.1-py3-none-manylinux2014_aarch64.whl", hash = "sha256:a13277e9bacc6933dea172e42231f7e6135bd3bdb073dd2688ee180418abd8d9", size = 45337093, upload-time = "2025-06-30T04:24:06.706Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/82/41d9b80f09b82e066894d9b508af07b7b0fa325ce0322980674de49106a0/milvus_lite-2.5.1-py3-none-manylinux2014_x86_64.whl", hash = "sha256:25ce13f4b8d46876dd2b7ac8563d7d8306da7ff3999bb0d14b116b30f71d706c", size = 55263911, upload-time = "2025-06-30T04:24:19.434Z" },
 ]
 
 [[package]]
@@ -2574,7 +2566,7 @@ wheels = [
 
 [[package]]
 name = "pymilvus"
-version = "3.0.0"
+version = "2.6.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cachetools" },
@@ -2584,10 +2576,10 @@ dependencies = [
     { name = "protobuf" },
     { name = "python-dotenv" },
     { name = "requests" },
-    { name = "setuptools" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/79/62/f5f975e56f1a52c479c6150bd0a9abda70508c52557395d2c09a375f1950/pymilvus-2.6.15.tar.gz", hash = "sha256:329a20fed7eb78607306ec80289f55151d9238bcfd3ecc61605b653c268326aa", size = 308491, upload-time = "2026-06-01T07:09:00.532Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ac/c1/01647e61f3a82fd881382746b6dde3401d65b88cd4f75bd059901fb2392b/pymilvus-3.0.0-1-py3-none-any.whl", hash = "sha256:57c8e7c87fbbf579f122b4df893949bc78e50bca2988527864891bd544817b05", size = 344817, upload-time = "2026-05-07T14:57:45.235Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/89/e21f103daef4e591ff2ed75e5b76061f5a9237930af4540bd02631bc58f3/pymilvus-2.6.15-py3-none-any.whl", hash = "sha256:c9e67810b40973d917010c176c6c07d3221a8c65b577bd924ae74fb222da8500", size = 343611, upload-time = "2026-06-01T07:08:58.934Z" },
 ]
 
 [package.optional-dependencies]
@@ -3155,11 +3147,11 @@ wheels = [
 
 [[package]]
 name = "setuptools"
-version = "81.0.0"
+version = "80.10.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0d/1c/73e719955c59b8e424d015ab450f51c0af856ae46ea2da83eba51cc88de1/setuptools-81.0.0.tar.gz", hash = "sha256:487b53915f52501f0a79ccfd0c02c165ffe06631443a886740b91af4b7a5845a", size = 1198299, upload-time = "2026-02-06T21:10:39.601Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/95/faf61eb8363f26aa7e1d762267a8d602a1b26d4f3a1e758e92cb3cb8b054/setuptools-80.10.2.tar.gz", hash = "sha256:8b0e9d10c784bf7d262c4e5ec5d4ec94127ce206e8738f29a437945fbc219b70", size = 1200343, upload-time = "2026-01-25T22:38:17.252Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/e3/c164c88b2e5ce7b24d667b9bd83589cf4f3520d97cad01534cd3c4f55fdb/setuptools-81.0.0-py3-none-any.whl", hash = "sha256:fdd925d5c5d9f62e4b74b30d6dd7828ce236fd6ed998a08d81de62ce5a6310d6", size = 1062021, upload-time = "2026-02-06T21:10:37.175Z" },
+    { url = "https://files.pythonhosted.org/packages/94/b8/f1f62a5e3c0ad2ff1d189590bfa4c46b4f3b6e49cef6f26c6ee4e575394d/setuptools-80.10.2-py3-none-any.whl", hash = "sha256:95b30ddfb717250edb492926c92b5221f7ef3fbcc2b07579bcd4a27da21d0173", size = 1064234, upload-time = "2026-01-25T22:38:15.216Z" },
 ]
 
 [[package]]
