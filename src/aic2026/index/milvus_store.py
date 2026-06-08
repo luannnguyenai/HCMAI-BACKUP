@@ -35,6 +35,12 @@ Deployment (SS 9 Q-a RESOLVED): dev/CI run against the embedded, file-backed
 Milvus Lite mode (CPU, no network, FLAT index); the real HNSW build runs on
 Milvus standalone (docker) on the lease box. `pymilvus` is lazy-imported so
 this module imports cleanly on a box without the `index` extra.
+
+Engine pin (SPEC-0006 SS 12): the milvus-lite 3.0 engine cross-wires a
+multi-vector collection's per-field segments when a fresh process reopens a
+persisted `.db` (the ingest -> serve pattern), so `pymilvus`/`milvus-lite` are
+pinned `< 3` in the `index` extra. The pin is the fix; this module's schema /
+ingest / search logic is engine-agnostic and unchanged.
 """
 
 from __future__ import annotations

@@ -49,6 +49,9 @@ def test_ingest_aligns_and_composes_global_pk_AC2(
     rows = store.client.query(
         "keyframes",
         filter="",
+        # milvus-lite 2.x requires a limit with an empty filter (the pinned
+        # engine, SPEC-0006 SS 12); the fixtures are tiny so any cap covers all.
+        limit=1000,
         output_fields=["pk", "frame_id", "video_id", "frame_idx"],
     )
     by_pk = {r["pk"]: r for r in rows}
@@ -89,7 +92,7 @@ def test_ingest_explicit_video_id_overrides_filename_AC2(
     }
     store.ingest(sources, video_id="L42_V123")
 
-    rows = store.client.query("keyframes", filter="", output_fields=["pk", "video_id"])
+    rows = store.client.query("keyframes", filter="", limit=1000, output_fields=["pk", "video_id"])
     by_pk = {r["pk"]: r for r in rows}
     assert set(by_pk) == {"L42_V123_0000", "L42_V123_0001"}
     assert all(r["video_id"] == "L42_V123" for r in by_pk.values())

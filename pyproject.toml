@@ -61,8 +61,22 @@ train = [
 # the `milvus_lite` extra, so it must be requested explicitly for the
 # file-backed Lite mode the dev/CI tests use. On a standalone deployment the
 # extra is harmless (the gRPC client is used instead).
+#
+# Version ceilings (<3) pin BELOW the milvus-lite 3.0 engine: that release
+# regressed multi-vector FLOAT_VECTOR collections - a collection with >1 dense
+# field, persisted by one process and reopened cold by another (the ingest ->
+# serve pattern), cross-wires its per-field segments on load and raises
+# "loaded index dim 1024 != expected dim 1152" (SPEC-0006 SS 13). milvus-lite
+# 2.4.x/2.5.x reload multi-vector correctly; the matching client is pymilvus
+# 2.5.x (a 3.0 client speaks a protocol the 2.x engine cannot parse, and vice
+# versa), which is also the SS 11.8-validated standalone client. The plain
+# `pymilvus[milvus_lite]` extra leaves milvus-lite unbounded (even pymilvus
+# 2.5.x pulls milvus-lite 3.0), so milvus-lite is pinned directly. setuptools
+# < 81: milvus-lite 2.x imports `pkg_resources`, removed in setuptools 81.
 index = [
-    "pymilvus[milvus_lite]>=2.5",
+    "pymilvus[milvus_lite]>=2.5,<3",
+    "milvus-lite>=2.4,<3",
+    "setuptools<81",
 ]
 # SPEC-0026: MVP serving API. FastAPI + uvicorn (async, ADR-0004) wrapping the
 # merged SPEC-0006 MilvusBackend. `uvicorn[standard]` is only needed to actually
@@ -101,7 +115,12 @@ dev = [
     # tests against a real embedded Milvus Lite instance in a tmp dir (FLAT,
     # CPU, no network). The `milvus_lite` extra is required since pymilvus 3.0
     # unbundled the embedded backend. Standalone HNSW is the lease-box target.
-    "pymilvus[milvus_lite]>=2.5",
+    # Pinned < 3 (with milvus-lite < 3 + setuptools < 81): the milvus-lite 3.0
+    # engine cross-wires multi-vector collections on cold cross-process reload
+    # (SPEC-0006 SS 13). See the `index` extra above for the full rationale.
+    "pymilvus[milvus_lite]>=2.5,<3",
+    "milvus-lite>=2.4,<3",
+    "setuptools<81",
     # fastapi: SPEC-0026 serving API. CI runs the AC1-AC9 serving tests in-process
     # via fastapi's TestClient (no uvicorn / network). The `serving` extra adds
     # uvicorn for actually running the server; tests need only fastapi + httpx
