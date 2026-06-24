@@ -28,6 +28,7 @@
 | Frame sampling | **KDE-GMM density-aware sampling** | Used by MERVIN; ensures ~1 frame per 2-3s |
 | Image embedding (primary) | **SigLIP-2 So400m/16@384** | Apache-2.0; best default 2026 |
 | Image embedding (Vietnamese) | **Meta CLIP 2 ViT-H/14** | MIT; best XM3600 multilingual |
+| Image embedding (offline visual-document lane) | Qwen3-VL-Embedding-2B | Apache-2.0; offline-only, fused; not on online query path (ADR-0012) |
 | Video embedding | **InternVideo2-1B** | Apache-2.0; 4 frames per clip |
 | OCR | **PaddleOCR PP-OCRv5 (latin/vi)** | Apache-2.0; covers 111 langs incl. Vietnamese diacritics |
 | OCR fallback (handwritten) | **VietOCR** | Apache-2.0; Vietnamese SOTA |
@@ -97,6 +98,7 @@ text query (Vietnamese)
   - `collection_internvideo2` (768-d float)
   - `collection_clap_audio` (512-d float)
   - structured fields per row: `video_id`, `frame_id`, `timestamp`, `shot_id`, `place_label`, `adl_label`, `object_tags[]`, `duration_ms`
+  - **NOTE (superseded by [SPEC-0006](../specs/SPEC-0006-milvus-schema-and-queries.md), 2026-06-05):** the per-encoder collections above are a pre-Milvus-2.5 sketch. The shipped design is a **single multi-vector `keyframes` collection** with named dense fields (siglip2 1152, metaclip2 1024, qwen3vl 2048 - the latter an offline-only visual-document lane per [ADR-0012](../adr/ADR-0012-qwen-offline-visual-document-lane.md)), keyed by a global primary key `pk = "<video_id>_<frame_id>"`, with `video_id`/`frame_id`/`frame_idx`/`youtube_url`/`description`/`od_tags` as scalar fields. See SPEC-0006 SS 2 and SS 10 for the full reconciliation.
 - **Elasticsearch** (single deployment)
   - `idx_ocr` - text + bbox + ts; Vietnamese analyser (icu_tokenizer + pyvi normalisation)
   - `idx_asr` - text + word-level ts; Vietnamese analyser
@@ -151,7 +153,7 @@ Target: end-to-end ~1.5s; operator decision ~5-15s. The position-bias 3-vote ens
 | Stage | Target p50 | Target p95 |
 |---|---|---|
 | Planner LLM (local 7B) | 100 ms | 250 ms |
-| Milvus ANN (each of 4 collections, parallel) | 80 ms | 150 ms |
+| Milvus ANN (per dense vector field, parallel) | 80 ms | 150 ms |
 | Elasticsearch (each of 3 indexes, parallel) | 50 ms | 120 ms |
 | DiacriticBERT MaxSim (C1, top-200 candidates from BM25) | 15 ms | 40 ms |
 | Per-task learned fusion (C2, LightGBM scoring) + filtering | 30 ms | 80 ms |
@@ -194,9 +196,14 @@ Notes:
 - 4 frames per clip @ 224x224
 - 768-d output
 
+**Qwen3-VL-Embedding-2B (offline visual-document lane)** at fp16:
+- 2048-d native output, MRL-truncatable via `out_dim`
+- **Offline only**: keyframes are encoded with `encode_image` and pre-indexed as an extra dense lane fused via C2 (SS 5.11); the online query path stays on the SigLIP-2 + Meta CLIP 2 text towers. The unified `encode_text` exists but is deliberately off the online hot path.
+- Rationale: [SPEC-0025](../specs/SPEC-0025-encoder-bench.md) screened the 2B against the floor on the AIC2025 proxy - query-encode latency ~5x the floor (52.7 ms vs ~11 ms p50 on H200) and a full-2B online footprint - so it is kept offline. Adoption into shipped fusion is gated on ground-truth-proven lift. See [ADR-0012](../adr/ADR-0012-qwen-offline-visual-document-lane.md).
+
 ### 5.4 Indexing
-- Milvus 2.5+; **HNSW** index (M=32, efConstruction=200); **efSearch=128** at query.
-- Per-collection collection sizes: 1M x 1024 fp16 = ~2 GB per collection on disk; 4 collections = ~8 GB. Easy.
+- Milvus 2.5+; **HNSW** index (M=32, efConstruction=200); **efSearch=1024** at query (raised from the original 128: [SPEC-0006](../specs/SPEC-0006-milvus-schema-and-queries.md) SS 11.8 measured recall@200 >= 0.95 only at ef=1024 on stable Milvus 2.5.x - siglip2 0.969 / metaclip2 0.968 / qwen3vl 0.985 - and the server rejects ef < top_k, so `search` also clamps `ef = max(ef, top_k)`).
+- Per-field index sizes: ~2 GB per 1M-vector fp16 field (siglip2 1152-d ~2.3 GB); the floor's three dense fields live in one multi-vector collection ([SPEC-0006](../specs/SPEC-0006-milvus-schema-and-queries.md)) totalling ~6-7 GB. Easy.
 - Elasticsearch 8.x; Vietnamese analyser via [`elasticsearch-analysis-vietnamese`](https://github.com/duydo/elasticsearch-analysis-vietnamese) + ICU.
 
 ### 5.5 OCR pipeline
@@ -269,6 +276,7 @@ Notes:
 ### Indexing (one-time, on a single A6000 48 GB)
 - SigLIP-2 So400m@384: 12 GPU-hours / 1M frames
 - Meta CLIP 2 H/14: 16 GPU-hours / 1M frames
+- Qwen3-VL-Embedding-2B (offline visual-document lane, ADR-0012): ~50 GPU-hours / 1M frames (indicative / unverified - ~5x the SigLIP-2 per-frame cost extrapolated from the SPEC-0025 latency screen; benchmark on the actual lease)
 - InternVideo2-1B (4 frames/clip @ ~250k clips): 24 GPU-hours
 - PaddleOCR (CPU OK, GPU optional): 6 hours
 - PhoWhisper + WhisperX (4 hours per 100h audio): assume 800h video -> 32 hours on 1 GPU

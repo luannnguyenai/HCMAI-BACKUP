@@ -57,25 +57,25 @@ Visual companions / Hình minh họa:
 
 **EN:** Feasible, but compressed. The repo has a strong planning and
 infrastructure base: SDD workflow, eval harness, remote GPU/R2 artifact flow,
-and a mature C1 DiacriticBERT workstream. The main risk is that the
-competition-facing retrieval product is not integrated yet: data ingestion,
-Milvus/Elasticsearch, DRES submit, React operator console, planner, reranker,
-and trace logger are still mostly specs or reserved specs.
+Milvus indexing, an MVP serving/UI loop, and a mature C1 DiacriticBERT
+workstream. The main risk is end-to-end integration: data ingestion,
+Elasticsearch/text lanes, DRES submit, submission verification, planner,
+reranker, and trace logger still need to close the competition loop.
 
 **VI:** Khả thi, nhưng thời gian đã bị nén. Kho hiện có nền tảng tốt: quy trình
-SDD, bộ eval, luồng chạy GPU từ xa với R2, và nhánh C1 DiacriticBERT khá chín.
-Rủi ro chính là sản phẩm truy hồi để thi vẫn chưa được tích hợp: nhập dữ liệu,
-Milvus/Elasticsearch, submit DRES, giao diện React cho operator, planner,
-reranker và trace logger vẫn chủ yếu nằm ở mức spec hoặc spec đã giữ chỗ.
+SDD, bộ eval, luồng chạy GPU từ xa với R2, Milvus index, vòng serving/UI MVP,
+và nhánh C1 DiacriticBERT khá chín. Rủi ro chính là tích hợp end-to-end: nhập
+dữ liệu, Elasticsearch/text lane, submit DRES, xác minh submit, planner,
+reranker và trace logger vẫn cần hoàn tất để khép kín vòng thi.
 
 Immediate critical path / Đường găng trước mắt:
 
 1. 2026-06-25 to 2026-06-27: validate released rules and dataset shape, then
    approve SPEC-0003.
-2. 2026-06-27 to 2026-07-03: build one real-data image retrieval lane before
-   expanding model breadth.
+2. 2026-06-27 to 2026-07-03: build one real-data image retrieval lane on the
+   existing Milvus path before expanding model breadth.
 3. 2026-07-03 to 2026-07-10: add text lanes and DRES submission.
-4. 2026-07-10 to 2026-07-17: ship the operator loop: UI, neighbour inspection,
+4. 2026-07-10 to 2026-07-17: harden the operator loop: neighbour inspection,
    submission verification, and trace logging.
 
 ---
@@ -122,15 +122,17 @@ pyproject.toml                        # uv-managed Python 3.11+ project
 ruff.toml                             # lint and format config
 uv.lock                               # pinned lockfile
 
-src/aic2026/
+src/aic2026/                          # Python package
   models/                             # Pydantic task, submission, metrics models
   harness/                            # eval backend protocol, runner, scoring
   reporting/                          # metrics.json, report.html, provenance
-  embedding/                          # Embedder protocol, dummy, SigLIP-2 wrapper
+  cli/                                # eval, embed, index, remote, serve, train CLIs
+  embedding/                          # SigLIP-2, Meta CLIP 2, Qwen3-VL, provided CLIP lanes
+  index/                              # Milvus multi-vector keyframe store + queries
+  serving/                            # FastAPI + WebSocket MVP serving API
   train/                              # C1 DiacriticBERT training utilities
-  eval/                               # C1 and harness eval helpers
+  eval/                               # C1, harness, and encoder-bench helpers
   remote/                             # remote GPU runner and R2 artifact support
-  cli/                                # eval, embed, train, remote CLIs
 
 tests/
   unit/                               # acceptance-criterion unit tests
@@ -139,16 +141,42 @@ tests/
 
 docs/
   strategy/                           # master strategy and feasibility audits
-  proposals/                          # architecture-level proposals
+  illustrations/                      # system, UI, agent, and stack visuals
+  research-notes/                     # cited external research and dataset intel
+  proposals/                          # architecture-level "what we'll build"
   specs/                              # component-level behavior contracts
   adr/                                # accepted architectural decisions
-  research-notes/                     # cited background research
+  permissions/                        # explicit-attribution records under ADR-0010
+  datasets/                           # placeholder for dataset refs; corpus is gitignored
   papers/                             # downloaded reference papers
 
 infra/remote/                         # GPU lease helper scripts
 eval-results/                         # generated eval outputs, per-run dirs ignored
 experiments/                          # experiment workspaces
+web/                                  # React + Vite MVP operator UI
 ```
+
+---
+
+## Architecture In One Paragraph / Kiến Trúc Tóm Tắt
+
+**EN:** Offline, ingest organiser-provided keyframes, object detections,
+metadata, YouTube URLs, and any provided CLIP embeddings; encode images through
+SigLIP-2, Meta CLIP 2, InternVideo2, and an offline-only Qwen3-VL visual
+document lane; index those vectors in one Milvus `keyframes` collection, with
+OCR/ASR/description text heading toward Elasticsearch. Online, a planner parses
+Vietnamese queries into tool calls, retrieval lanes run in parallel, fusion
+uses learned per-task models when available and RRF fallback otherwise, and the
+operator inspects the top results in the React console before DRES submission.
+
+**VI:** Offline, hệ thống nhập keyframe, object detection, metadata, YouTube
+URL và embedding CLIP do ban tổ chức cung cấp nếu có; mã hóa ảnh bằng SigLIP-2,
+Meta CLIP 2, InternVideo2 và lane Qwen3-VL chỉ dùng offline; lưu vector trong
+một collection Milvus `keyframes`, còn OCR/ASR/description sẽ đi vào
+Elasticsearch. Online, planner phân tích truy vấn tiếng Việt thành các tool
+call, các lane truy hồi chạy song song, fusion dùng mô hình học theo loại task
+khi đã có và fallback RRF khi chưa có, rồi operator kiểm tra kết quả trong
+React console trước khi submit lên DRES.
 
 ---
 
@@ -161,6 +189,11 @@ experiments/                          # experiment workspaces
 - Ranking metrics: R@1, R@5, R@10, MRR, NDCG@10, task slices, latency fields.
 - Embedding skeleton: `Embedder`, `DummyEmbedder`, SigLIP-2 wrapper, and
   `embed` CLI.
+- Multi-vector Milvus keyframe store, index CLI, and encoder bakeoff helpers.
+- MVP serving API: FastAPI, WebSocket search flow, image serving, readiness,
+  and issue capture.
+- MVP React operator UI: query box, lane selector, virtualised result grid,
+  frame detail, readiness indicator, and issue capture.
 - C1 tooling: noise functions, corpus builder, head training/eval helpers,
   C1 demo, and remote jobs.
 - Remote execution: `remote` CLI, SSH launchers, Cloudflare R2 client,
@@ -173,6 +206,11 @@ experiments/                          # experiment workspaces
 - Metric truy hồi: R@1, R@5, R@10, MRR, NDCG@10, lát cắt theo task, trường
   latency.
 - Khung embedding: `Embedder`, `DummyEmbedder`, wrapper SigLIP-2 và CLI `embed`.
+- Milvus keyframe store đa vector, CLI `index`, và helper bakeoff encoder.
+- Serving API MVP: FastAPI, luồng tìm kiếm WebSocket, phục vụ ảnh, readiness,
+  và ghi nhận issue trong UI.
+- Giao diện operator MVP bằng React: query box, chọn lane, grid kết quả ảo hóa,
+  xem chi tiết frame, readiness indicator, và issue capture.
 - Công cụ C1: hàm tạo nhiễu, tạo corpus, train/eval head, demo C1 và remote job.
 - Chạy từ xa: CLI `remote`, launcher SSH/SLURM, client Cloudflare R2, ledger
   manifest, và luồng restore cache/provision.
@@ -182,16 +220,16 @@ experiments/                          # experiment workspaces
 ## What Is Still Spec-Only / Phần Còn Ở Mức Spec
 
 **EN:** The following are critical and not yet integrated runtime: SPEC-0003
-data ingestion, SPEC-0005 OCR/ASR ingestion, SPEC-0006 Milvus, SPEC-0007
-Elasticsearch, SPEC-0008 planner, SPEC-0010 reranker, SPEC-0012 React console,
-SPEC-0013 submission verification, SPEC-0018 DRES integration, and SPEC-0019
-operator trace logger.
+data ingestion, SPEC-0005 OCR/ASR ingestion, SPEC-0007 Elasticsearch,
+SPEC-0008 planner, SPEC-0010 reranker, the full SPEC-0012 React console beyond
+the MVP, SPEC-0013 submission verification, SPEC-0018 DRES integration, and
+SPEC-0019 operator trace logger.
 
 **VI:** Các phần sau là đường găng nhưng chưa thành runtime tích hợp:
-SPEC-0003 nhập dữ liệu, SPEC-0005 OCR/ASR, SPEC-0006 Milvus, SPEC-0007
-Elasticsearch, SPEC-0008 planner, SPEC-0010 reranker, SPEC-0012 giao diện React,
-SPEC-0013 xác minh submit, SPEC-0018 tích hợp DRES, và SPEC-0019 trace logger
-cho operator.
+SPEC-0003 nhập dữ liệu, SPEC-0005 OCR/ASR, SPEC-0007 Elasticsearch,
+SPEC-0008 planner, SPEC-0010 reranker, phần đầy đủ của SPEC-0012 React console
+vượt ngoài MVP, SPEC-0013 xác minh submit, SPEC-0018 tích hợp DRES, và
+SPEC-0019 trace logger cho operator.
 
 ---
 

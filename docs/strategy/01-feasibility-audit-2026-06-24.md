@@ -1,18 +1,19 @@
 # Feasibility Audit - 2026-06-24
 
 > Scope: Feasibility check for the AIC2026-SCOAI plan as of 2026-06-24
-> (Asia/Saigon), using the local repository state at `31f36f7` and the
-> official competition website.
+> (Asia/Saigon), using the local repository state after syncing `origin/main`
+> at `689fbad` plus this audit branch, and the official competition website.
 
 ## Verdict
 
 **Feasible, but compressed.** The target is still credible if the team treats
 the 2026-06-25 dataset/rules release as the start of a focused Phase 1
 implementation sprint. The repo has a useful spec-driven foundation, a working
-evaluation harness, remote GPU/R2 infrastructure, and a materially advanced C1
-DiacriticBERT workstream. The critical gap is that the competition-facing
-retrieval product is still mostly architecture and reserved specs rather than
-integrated runtime.
+evaluation harness, remote GPU/R2 infrastructure, Milvus indexing, an MVP
+serving/UI loop, and a materially advanced C1 DiacriticBERT workstream. The
+critical gap is no longer "no retrieval runtime"; it is incomplete end-to-end
+integration across real data ingestion, text retrieval, DRES submission,
+submission verification, planner/reranker orchestration, and operator traces.
 
 ## External Schedule Check
 
@@ -43,19 +44,26 @@ do du kien trien khai cac vong thi" and "Noi dung", checked 2026-06-24.
 - **Remote execution is unusually mature.** `bin/remote`, R2 artifact sync,
   warm-cache restore, run manifests, and job registry reduce the risk of
   losing work on ephemeral GPU leases.
+- **Milvus retrieval substrate exists.** SPEC-0006 adds the multi-vector
+  keyframe store, index CLI, Milvus Lite tests, and the standalone deployment
+  path needed for the first image-lane baseline.
+- **MVP operator loop exists.** SPEC-0026 and SPEC-0027 add the FastAPI/WebSocket
+  serving layer plus the React query/grid/detail/issue-capture UI. It still
+  needs real data, DRES, submission verification, and trace logging.
 - **C1 has momentum.** SPEC-0014 includes noise schedules, corpus building,
   head training, offline eval, R2-backed remote jobs, and demo tooling.
 
 ### What is not yet real
 
-- **No end-to-end retrieval system yet.** Milvus, Elasticsearch, OCR/ASR
-  ingestion, DRES integration, planner, reranker, UI, and operator-trace logger
-  are still reserved or draft specs, not integrated runtime.
+- **No end-to-end competition loop yet.** Elasticsearch/text retrieval, OCR/ASR
+  ingestion, DRES integration, planner, reranker, submission verification, and
+  operator-trace logger are still reserved or draft specs, not integrated
+  runtime.
 - **No real-data ingestion contract yet.** SPEC-0003 is reserved; the June 25
   dataset must be turned into an approved ingestion spec immediately.
 - **C2 and C4 are blocked.** C2 needs ranked lists over a dev set; C4 needs
-  operator traces. Neither can progress meaningfully until ingestion, UI, and
-  trace logging exist.
+  operator traces. Neither can progress meaningfully until ingestion and trace
+  logging exist.
 - **Local developer ergonomics need cleanup.** The WSL shell lacks `uv` on
   `PATH`; the existing Windows `.venv` works, but moto/R2 tests fail locally
   because Windows cannot connect to `0.0.0.0:<port>`.
@@ -69,9 +77,10 @@ do du kien trien khai cac vong thi" and "Noi dung", checked 2026-06-24.
 | Remote GPU/R2 | Implementing | High | Strong competitive advantage if credentials and lease playbooks stay current. |
 | C1 DiacriticBERT | Implementing | High | Most mature technical edge. Keep it, but do not let it crowd out ingestion/UI. |
 | Data ingestion | Reserved | Medium | Tomorrow's dataset release must produce SPEC-0003 and a minimal importer within 48 hours. |
-| Milvus/Elasticsearch retrieval | Reserved | Medium | Core product risk. Needs first thin baseline before adding all model lanes. |
+| Milvus retrieval | Implementing | Medium-high | Core substrate now exists; first risk is loading real organiser data into it. |
+| Elasticsearch/text retrieval | Reserved | Medium | OCR/ASR/description lanes remain core product risk. |
 | DRES/submission path | Draft | Medium | SPEC-0018 exists; wire early to avoid finals-day surprises. |
-| UI/operator console | Reserved | Medium-low | Operator moat depends on SPEC-0012 and SPEC-0013; these cannot wait until late Phase 2. |
+| UI/operator console | MVP implemented | Medium | MVP exists; operator moat still needs submission verification, neighbour workflows, drills, and trace logging. |
 | Planner/agent | Reserved | Medium-low | Bakeoff is useful, but a deterministic retrieval baseline should precede agent work. |
 | C2 learned fusion | Reserved | Medium | Feasible after ranked-list logs exist; otherwise becomes paper-only. |
 | C4 self-distillation | Reserved | Medium-low | Feasible only if trace logging starts during Phase 1 practice. |
@@ -82,13 +91,14 @@ do du kien trien khai cac vong thi" and "Noi dung", checked 2026-06-24.
    Write the dataset-shape delta, approve SPEC-0003, and run a loader over a
    tiny sample.
 2. **2026-06-27 to 2026-07-03: thin retrieval baseline.**
-   Use organiser keyframes and metadata first; compute one SigLIP-2 lane; store
-   vectors in a simple local baseline if Milvus is not ready.
+   Use organiser keyframes and metadata first; compute one SigLIP-2 lane; load
+   vectors into the existing Milvus path before widening model coverage.
 3. **2026-07-03 to 2026-07-10: text lanes and submission path.**
    Add OCR/ASR/description indexing and wire SPEC-0018 DRES submit. This is
    more important than adding a second image encoder.
 4. **2026-07-10 to 2026-07-17: operator loop.**
-   Ship a minimal React console plus submission verification and trace logging.
+   Harden the MVP React console with neighbour inspection, submission
+   verification, and trace logging.
 5. **2026-07-17 to mid-August: quality work.**
    Add Meta CLIP 2, InternVideo2, C1 lane, reranker, C2, planner, and C4 in
    that order, gated by eval evidence.
@@ -100,7 +110,7 @@ do du kien trien khai cac vong thi" and "Noi dung", checked 2026-06-24.
 | 2026-06-27 | Data intake | SPEC-0003 approved and a sample loader produces canonical frame records. |
 | 2026-07-03 | Retrieval smoke | One image lane returns top-10 for at least 20 real-data sanity queries. |
 | 2026-07-10 | Text + submit | OCR/ASR/metadata lane exists and DRES submit can be tested end to end. |
-| 2026-07-17 | Operator loop | UI can search, inspect neighbours, submit, and log traces. |
+| 2026-07-17 | Operator loop | UI can search real data, inspect neighbours, submit, and log traces. |
 | 2026-08-01 | Differentiation | C1 integrated or explicitly deferred; C2 training data captured; C4 traces accumulating. |
 | 2026-08-15 | Preliminary readiness | Full baseline beats the internal baseline by 20% or the team narrows scope for reliability. |
 

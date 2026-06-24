@@ -27,10 +27,16 @@ dependencies = [
 embedding = [
     "torch>=2.4",
     "open-clip-torch>=2.32",
+    # transformers floor: Qwen3-VL-Embedding (SPEC-0025) may require a newer
+    # release than SigLIP-2 does; if the bench fails to load Qwen on the box,
+    # bump this floor per the HF model card (SPEC-0025 SS 9 Q2).
     "transformers>=4.45",
     "sentencepiece>=0.2",
     "huggingface-hub>=0.24",
     "pillow>=10",
+    # bitsandbytes: optional INT4 load for the SPEC-0025 deployability footprint
+    # (the 5070-fit gate). Only exercised on the GPU box; not installed in CI.
+    "bitsandbytes>=0.43",
 ]
 # SPEC-0014: C1 DiacriticBERT training. torch + transformers (frozen BGE-M3),
 # datasets (public Vietnamese corpora), pyarrow (the contrastive Parquet). Not
@@ -45,12 +51,52 @@ train = [
     "pyarrow>=16",
     "huggingface-hub>=0.24",
 ]
+# SPEC-0006: Milvus multi-vector keyframe store. The real ingest target is
+# Milvus standalone (docker) on the lease box for the HNSW build; dev/CI run
+# against the embedded, file-backed Milvus Lite mode that pymilvus bundles
+# (CPU-only, no network, FLAT index). pymilvus pulls in `milvus-lite` on
+# Linux/macOS, which is what backs the unit tests. Install the runtime client
+# via `uv sync --extra index`; CI gets it through the dev group below.
+# pymilvus[milvus_lite]: pymilvus >= 3.0 unbundled the embedded backend into
+# the `milvus_lite` extra, so it must be requested explicitly for the
+# file-backed Lite mode the dev/CI tests use. On a standalone deployment the
+# extra is harmless (the gRPC client is used instead).
+#
+# Version ceilings (<3) pin BELOW the milvus-lite 3.0 engine: that release
+# regressed multi-vector FLOAT_VECTOR collections - a collection with >1 dense
+# field, persisted by one process and reopened cold by another (the ingest ->
+# serve pattern), cross-wires its per-field segments on load and raises
+# "loaded index dim 1024 != expected dim 1152" (SPEC-0006 SS 13). milvus-lite
+# 2.4.x/2.5.x reload multi-vector correctly; the matching client is pymilvus
+# 2.5.x (a 3.0 client speaks a protocol the 2.x engine cannot parse, and vice
+# versa), which is also the SS 11.8-validated standalone client. The plain
+# `pymilvus[milvus_lite]` extra leaves milvus-lite unbounded (even pymilvus
+# 2.5.x pulls milvus-lite 3.0), so milvus-lite is pinned directly. setuptools
+# < 81: milvus-lite 2.x imports `pkg_resources`, removed in setuptools 81.
+index = [
+    "pymilvus[milvus_lite]>=2.5,<3",
+    "milvus-lite>=2.4,<3",
+    "setuptools<81",
+]
+# SPEC-0026: MVP serving API. FastAPI + uvicorn (async, ADR-0004) wrapping the
+# merged SPEC-0006 MilvusBackend. `uvicorn[standard]` is only needed to actually
+# run the server (it brings websockets / httptools); the unit + AC tests drive
+# the app in-process via fastapi's TestClient, so CI gets `fastapi` through the
+# dev group below without the heavier uvicorn extras. Install to serve:
+# `uv sync --extra serving --extra index`. httpx (GitHub issue POST) and boto3
+# (R2 screenshot upload) are existing core deps.
+serving = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+]
 
 [project.scripts]
 eval = "aic2026.cli.eval:main"
 embed = "aic2026.cli.embed:main"
+index = "aic2026.cli.index:main"
 remote = "aic2026.cli.remote:main"
 remote-job-exec = "aic2026.cli.remote_job_exec:main"
+serve = "aic2026.cli.serve:main"
 train = "aic2026.cli.train:main"
 
 [dependency-groups]
@@ -65,6 +111,21 @@ dev = [
     # pyarrow: the C1 corpus builder (SPEC-0014) writes the contrastive Parquet;
     # tests exercise it via the clean_strings override (CPU, no network).
     "pyarrow>=16",
+    # pymilvus[milvus_lite]: SPEC-0006 Milvus store. CI runs the AC1-AC7 unit
+    # tests against a real embedded Milvus Lite instance in a tmp dir (FLAT,
+    # CPU, no network). The `milvus_lite` extra is required since pymilvus 3.0
+    # unbundled the embedded backend. Standalone HNSW is the lease-box target.
+    # Pinned < 3 (with milvus-lite < 3 + setuptools < 81): the milvus-lite 3.0
+    # engine cross-wires multi-vector collections on cold cross-process reload
+    # (SPEC-0006 SS 13). See the `index` extra above for the full rationale.
+    "pymilvus[milvus_lite]>=2.5,<3",
+    "milvus-lite>=2.4,<3",
+    "setuptools<81",
+    # fastapi: SPEC-0026 serving API. CI runs the AC1-AC9 serving tests in-process
+    # via fastapi's TestClient (no uvicorn / network). The `serving` extra adds
+    # uvicorn for actually running the server; tests need only fastapi + httpx
+    # (httpx is already a core dep).
+    "fastapi>=0.115",
 ]
 
 [build-system]

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# POSIX wrapper for the `serve` entry point (SPEC-0026).
+#
+# Mirrors bin/index: on Linux/Mac use `./bin/serve ...` from a clone; on
+# Windows `uv run serve ...` works directly via the [project.scripts] console
+# script. Requires the `serving` + `index` extras:
+#   uv sync --extra serving --extra index
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+exec uv run serve "$@"

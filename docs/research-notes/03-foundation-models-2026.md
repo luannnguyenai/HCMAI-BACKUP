@@ -53,6 +53,12 @@
 ### A.8 BLIP-2 ITC
 - Salesforce; Q-Former ITC head. Superseded for retrieval by SigLIP-2/Meta CLIP 2 but **excellent for ITM-style reranking**.
 
+### A.9 Qwen3-VL-Embedding (Alibaba, Jan 2026) - screened SPEC-0025, deferred as online encoder
+- Unified multimodal embedder (text+image+video -> one space), Apache-2.0, 2B (2048-d) / 8B (4096-d), MRL, **MMEB-V2 SOTA** (8B 77.8; strong visual-document retrieval). Official API: the QwenLM/Qwen3-VL-Embedding repo's `Qwen3VLEmbedder.process()` (instruction-aware), **not** plain `transformers.AutoModel`.
+- **Bake-off vs the floor on the AIC2025 proxy (SPEC-0025, 2026-06-03):** query-encode latency **~5x** SigLIP-2/Meta CLIP 2 (52.7 ms vs ~11-12 ms p50 on H200); and being a *unified 2B* it has no lightweight online text tower (unlike the CLIP-style floor), so its online footprint is the full model (~1.5-2 GB INT4, tight in the 5070's ~3 GB headroom; ADR-0003). Rigorous R@k is blocked on ground truth (SPEC-0025 SS 9 Q1).
+- **Decision (formalized 2026-06-04, [ADR-0012](../adr/ADR-0012-qwen-offline-visual-document-lane.md)):** **offline-only visual-document lane** - `encode_image` over keyframes is pre-indexed and fused via C2 (GT-gated), while online query encoding stays on the SigLIP-2 + Meta CLIP 2 text towers. Qwen is **deferred as an online encoder** (the ~5x latency + full-2B footprint never touch the hot path). See [SPEC-0025](../specs/SPEC-0025-encoder-bench.md) for the screen and [ADR-0012](../adr/ADR-0012-qwen-offline-visual-document-lane.md) for the decision.
+- **Gemini Embedding 2** is disqualified for the retrieval path entirely: closed-weight API, incompatible with the air-gapped 5070 finals (the query encoder must run locally).
+
 ### Summary table (image-text)
 
 | Model | Params | IN-1k 0-shot | XM3600 | License | Best for |

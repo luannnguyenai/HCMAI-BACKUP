@@ -33,17 +33,19 @@ checked 2026-06-24.
 ### 1.1 Feasibility snapshot as of 2026-06-24
 
 **Verdict: feasible, but compressed.** The strongest evidence in favour is the
-repo's SDD discipline, working eval harness, remote GPU/R2 substrate, and
-mature C1 DiacriticBERT workstream. The strongest risk is that the actual
-competition-facing retrieval product is still mostly reserved specs: data
-ingestion, Milvus/Elasticsearch retrieval, DRES submit, React console,
-submission verification, planner, and operator traces are not yet integrated.
+repo's SDD discipline, working eval harness, remote GPU/R2 substrate, Milvus
+indexing path, MVP serving/UI loop, and mature C1 DiacriticBERT workstream. The
+strongest risk is that the actual competition-facing retrieval product is not
+yet end-to-end: data ingestion, Elasticsearch/text retrieval, DRES submit,
+submission verification, planner, reranker, and operator traces still need to
+close the loop.
 
 Immediate priorities:
 
 1. Turn the June 25 dataset release into SPEC-0003 plus a sample loader within
    48 hours.
-2. Build a thin real-data retrieval baseline before expanding model breadth.
+2. Build a thin real-data retrieval baseline on the existing Milvus path before
+   expanding model breadth.
 3. Ship DRES submission, submission verification, and trace logging early
    enough for operator practice and C4 self-distillation.
 4. Keep C3 and C5 out of scope until Phase 1 gates are green.
@@ -96,7 +98,7 @@ If at least two of {C1, C2, C4} pass their dev-set ablations, we are a technical
 |        +-- TransNetV2 shot detection                           |
 |        |     + KDE-GMM frame sampling -> ~1M keyframes         |
 |        |                                                       |
-|        +-- SigLIP-2 So400m/16@384 ---- 1024-d ---> Milvus#1    |
+|        +-- SigLIP-2 So400m/16@384 ---- 1152-d ---> Milvus#1    |
 |        +-- Meta CLIP 2 ViT-H/14   ---- 1024-d ---> Milvus#2    |
 |        +-- InternVideo2-1B (4 frames/clip) ------> Milvus#3    |
 |        |                                                       |
@@ -181,7 +183,20 @@ correct, fast submissions become the automatic agent's training corpus.
 
 For the full diagram and component decisions, see `docs/proposals/01-interactive-system-architecture.md` and `docs/proposals/02-automatic-track-agent.md`.
 
-## 4. Updated plan from the June 24 audit
+> Note (updated 2026-06-05): the ASCII sketch above predates two shipped
+> decisions. (1) Storage is a **single multi-vector Milvus `keyframes`
+> collection** with named dense fields (SigLIP-2 1152, Meta CLIP 2 1024,
+> Qwen3-VL-Embedding-2B 2048), keyed by a global
+> `pk = "<video_id>_<frame_id>"`, per
+> [SPEC-0006](../specs/SPEC-0006-milvus-schema-and-queries.md). This
+> supersedes the per-encoder `Milvus#1..#4` boxes drawn here. (2) An additional
+> **Qwen3-VL-Embedding-2B offline-only visual-document lane** is indexed
+> alongside the floor encoders ([ADR-0012](../adr/ADR-0012-qwen-offline-visual-document-lane.md);
+> offline `encode_image` only, never the online query encoder). Encoder dims
+> are verified: SigLIP-2 = 1152, Meta CLIP 2 = 1024,
+> Qwen3-VL-Embedding-2B = 2048, InternVideo2 = 768.
+
+## 4. Updated 17-week plan from the June 24 audit
 
 ### Phase 0 - Pre-launch alignment (closed: May 15 -> June 15)
 - [ ] Confirm team registration status externally; the repo cannot prove this.
@@ -314,6 +329,7 @@ training, and quantisation calibration. Cloud burst is managed through
    candidate: [`ThanhToan2111`](https://github.com/ThanhToan2111) (current team
    member, author of the 2025 baseline) has the most operator-side experience
    with DRES and the AIC HCMC venue.
-10. **2025 baseline interview**: the agenda in [`docs/permissions/2025-baseline-reuse.md`](../permissions/2025-baseline-reuse.md)
-    remains high leverage for SPEC-0018 and UI/operator lessons; schedule it
-    before DRES integration work.
+10. **2025 baseline interview**: the 30-minute agenda in
+    [`docs/permissions/2025-baseline-reuse.md`](../permissions/2025-baseline-reuse.md)
+    SS 4 remains high leverage for SPEC-0018 and UI/operator lessons; schedule
+    it before DRES integration work.

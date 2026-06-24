@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# POSIX wrapper for the `index` entry point (SPEC-0006).
+#
+# Mirrors bin/embed: on Linux/Mac use `./bin/index ...` from a clone; on
+# Windows `uv run index ...` works directly via the [project.scripts]
+# console script. Requires the `index` extra: `uv sync --extra index`.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+exec uv run index "$@"
