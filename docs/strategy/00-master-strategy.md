@@ -8,19 +8,45 @@
 
 ---
 
-## 1. Critical dates (from today, May 24, 2026)
+## 1. Critical dates (checked 2026-06-24)
 
 | Date | Milestone | Implication for us |
 |---|---|---|
-| **May 15-20, 2026** | Competition launch (just happened) | Confirm we have the latest official rules |
-| **June 15, 2026** | Registration closes (**T-3 weeks**) | Register team before this |
-| **June 25, 2026** | Preliminary round content + dataset released (**T-4 weeks**) | Start building on real data |
-| **June-July 2026** | Training sessions by organisers (**~8 weeks**) | Attend all of them; great signal source |
+| **May 15-20, 2026** | Competition launch | Rules and public framing confirmed on the official site |
+| **June 15, 2026** | Registration closes | Past deadline; team status must be confirmed outside this repo |
+| **June 25, 2026** | Preliminary round content + dataset released | Immediate Phase 1 trigger; read rules and sample data within 24 hours |
+| **June-July 2026** | Training sessions by organisers | Attend all sessions; capture rule/data clarifications in research notes |
 | **Aug 2026** | Preliminary round runs | First competitive test |
 | **Aug 30, 2026** | Preliminary results announced | Either advance or stop |
 | **Sept 12-26, 2026** | Finals - interactive on-site (**T-16 weeks**) | Real prize |
 
-**Today T-0 is May 24, 2026.** We have **roughly 17 weeks**. Tight but tractable if we start in parallel.
+**Status date: 2026-06-24.** The repo has crossed from Phase 0 planning into
+a one-day Phase 1 readiness checkpoint. The official schedule still makes the
+strategy feasible, but the remaining runway is compressed: the June 25
+dataset/rules release must become a focused ingestion, indexing, UI, and DRES
+sprint. See [`01-feasibility-audit-2026-06-24.md`](01-feasibility-audit-2026-06-24.md).
+
+Source: official competition page, section "Thoi gian, tien do du kien trien
+khai cac vong thi" and "Noi dung", <https://aichallenge.hochiminhcity.gov.vn/>,
+checked 2026-06-24.
+
+### 1.1 Feasibility snapshot as of 2026-06-24
+
+**Verdict: feasible, but compressed.** The strongest evidence in favour is the
+repo's SDD discipline, working eval harness, remote GPU/R2 substrate, and
+mature C1 DiacriticBERT workstream. The strongest risk is that the actual
+competition-facing retrieval product is still mostly reserved specs: data
+ingestion, Milvus/Elasticsearch retrieval, DRES submit, React console,
+submission verification, planner, and operator traces are not yet integrated.
+
+Immediate priorities:
+
+1. Turn the June 25 dataset release into SPEC-0003 plus a sample loader within
+   48 hours.
+2. Build a thin real-data retrieval baseline before expanding model breadth.
+3. Ship DRES submission, submission verification, and trace logging early
+   enough for operator practice and C4 self-distillation.
+4. Keep C3 and C5 out of scope until Phase 1 gates are green.
 
 ## 2. Winning hypothesis - floor, edge, moat
 
@@ -155,24 +181,30 @@ correct, fast submissions become the automatic agent's training corpus.
 
 For the full diagram and component decisions, see `docs/proposals/01-interactive-system-architecture.md` and `docs/proposals/02-automatic-track-agent.md`.
 
-## 4. The 17-week plan
+## 4. Updated plan from the June 24 audit
 
-### Phase 0 - Pre-launch alignment (Now -> June 15) - 3 weeks
-- [ ] Team registered before June 15.
-- [ ] Read all four research notes (`docs/research-notes/`).
-- [ ] Each member runs `docs/proposals/03-data-pipeline.md` bootstrap to get a working dev env.
-- [ ] Build minimal end-to-end demo on **LSC'24 public dataset** as a stand-in for the (not-yet-released) AIC dataset:
-  - TransNetV2 -> SigLIP-2 -> FAISS flat -> simple Flask UI -> DRES local server.
-- [ ] Internal mock-task practice - at least 3 sessions before June 15.
-- [ ] **Decision gate**: confirm all licenses (PhoWhisper CC-BY-NC, jina-v3 CC-BY-NC) are acceptable to the organisers. *Verify in writing with the organising committee.*
+### Phase 0 - Pre-launch alignment (closed: May 15 -> June 15)
+- [ ] Confirm team registration status externally; the repo cannot prove this.
+- [x] Strategy, proposals, specs, and ADR workflow are in place.
+- [x] Evaluation harness, remote runner, R2 artifact path, and C1 DiacriticBERT
+  tooling are implemented enough to support Phase 1.
+- [ ] Record any organiser license clarification in `docs/research-notes/` or a
+  follow-up ADR if it changes the model stack.
 
 ### Phase 1 - Real-data baseline (June 25 -> mid-July) - 3 weeks
-- [ ] AIC2026 preliminary content released June 25 - read & summarise the rules within 24 hours.
-- [ ] Reproduce SigLIP-2 + Meta CLIP 2 baseline on the AIC dataset.
-- [ ] Build the Milvus + Elasticsearch indexes for OCR/ASR.
-- [ ] Build the React UI v1 with grid + temporal scrubber + filter sidebar.
-- [ ] Wire DRES (or whatever scoring server organisers use).
-- [ ] **Decision gate**: baseline must hit at least ~60% of estimated maximum on internal practice tasks.
+- [ ] Within 24 hours of release: summarise official rules, task types, dataset
+  shape, scoring, and submission API deltas.
+- [ ] Approve SPEC-0003 and run a sample loader over organiser keyframes,
+  metadata, object detection, YouTube URLs, and any provided CLIP embeddings.
+- [ ] Build a thin retrieval baseline first: organiser metadata + one SigLIP-2
+  image lane + local top-10 report.
+- [ ] Add OCR/ASR/description text lanes and a minimal Milvus/Elasticsearch or
+  local fallback index.
+- [ ] Wire DRES or organiser scoring submission via SPEC-0018.
+- [ ] Build the React console MVP with grid, neighbour inspection, submission
+  verification, and trace logging.
+- [ ] **Decision gate**: by mid-July, a real-data baseline must support search,
+  inspect, submit, trace, and nightly smoke evaluation.
 
 ### Phase 2 - Full system + fine-tuning + original contributions (mid-July -> mid-Aug) - 4 weeks
 
@@ -191,7 +223,10 @@ For the full diagram and component decisions, see `docs/proposals/01-interactive
 - [ ] **C3 - PriorDP** (only if Phase 2 slack and TRAKE still in 2026): build scene-transition prior matrix; replace DANTE linear penalty with prior-weighted DP; ablate.
 - [ ] **C5 - Counterfactual VLM rerank** (only if Phase 2 slack): build the iterative-pruning rerank loop; ablate on the long-tail slice.
 
-**Decision gate**: full system beats baseline by 20%+ on internal practice AND at least 2 of {C1, C2, C4} pass their ablations (or are documented as negative results with their fallback shipped).
+**Decision gate**: full system beats baseline by 20%+ on internal practice AND
+at least 2 of {C1, C2, C4} pass their ablations (or are documented as negative
+results with their fallback shipped). If Phase 1 gates slip, defer C3/C5 and
+ship reliability over novelty breadth.
 
 ### Phase 3 - Preliminary round (Aug) - 4 weeks
 - [ ] Compete in preliminary. Goal: top-3 finish guarantees a finals slot.
@@ -221,7 +256,10 @@ The two operators must be cross-trained and able to swap mid-round.
 
 ## 6. Hardware plan
 
-**Development**: 1xRTX 4090 (24 GB) or 1xA6000 (48 GB) per engineer. Cloud burst to H100/H200 only for synthetic-caption generation and one-off fine-tunes.
+**Development**: local laptops/workstations for CPU-safe development; remote
+GH200/H200-style leases for embedding extraction, captioning, C1/C2/C4
+training, and quantisation calibration. Cloud burst is managed through
+`bin/remote` and Cloudflare R2 per ADR-0011.
 
 **Finals**: bring 2 identical laptops (mirror images), redundant power, 4G hotspot backup. Pre-stage all model weights on each laptop (Vintern, PhoWhisper, SigLIP-2 quantised, Meta CLIP 2 quantised - total ~30 GB).
 
@@ -258,15 +296,24 @@ The two operators must be cross-trained and able to swap mid-round.
 10. The LSC SOTA review PDF in `docs/papers/lsc-systems/` (already there)
 11. The downloaded papers in `docs/papers/` (skim abstracts; deep-read only when implementing)
 
-## 10. Open questions / decisions to make in the next 2 weeks
+## 10. Open questions / decisions to make next
 
-1. **Team registration**: register through <https://263.org.vn/AIC2026-Registration> before June 15.
-2. **License confirmation**: email/Slack the organising committee to confirm whether CC-BY-NC weights (PhoWhisper, jina-v3) are allowed. **Risk reduced (2026-05-28)**: team-channel intel ([research-note 06](../research-notes/06-aic2026-dataset-shape.md) §2.1) confirms organiser metadata carries YouTube URLs, so `yt-dlp` auto-captions become the primary Vietnamese-transcript source and PhoWhisper is demoted to a fallback for videos lacking captions. Empirical coverage to be measured post-June-25.
+1. **Team registration status**: June 15 has passed; confirm externally that the
+   team is registered and record only non-sensitive status in repo docs.
+2. **License confirmation**: email/Slack the organising committee to confirm whether CC-BY-NC weights (PhoWhisper, jina-v3) are allowed. **Risk reduced (2026-05-28)**: team-channel intel ([research-note 06](../research-notes/06-aic2026-dataset-shape.md) §2.1) confirms organiser metadata carries YouTube URLs, so `yt-dlp` auto-captions become the primary Vietnamese-transcript source and PhoWhisper is demoted to a fallback for videos lacking captions. Empirical coverage must be measured after the June 25 data release.
 3. **Hardware** (resolved May 25, see [ADR-0003](../adr/ADR-0003-rtx5070-finals-gh200-offline.md) and [ADR-0006](../adr/ADR-0006-int4-quantization-hot-path.md)): finals box = **RTX 5070 (12 GB)**; offline training/indexing on **GH200** cloud burst. Implication: all hot-path LLM/VLM weights must be quantized to INT4 or FP4; only text-tower encoders kept online; image embeddings pre-computed on GH200.
 4. **LLM path** (in flight, see [ADR-0005](../adr/ADR-0005-llm-path-bakeoff-gates-planner.md) + [proposal 09](../proposals/09-llm-path-bakeoff.md) + [SPEC-0002](../specs/SPEC-0002-llm-path-bakeoff-runner.md)): local-5070 vs Groq-cloud bakeoff. Owner = team lead. Deadline = end of June. Closes the original "cloud budget" question with a measurement, not a guess.
 5. **UI stack** (resolved May 25, see [ADR-0004](../adr/ADR-0004-no-streamlit-react-websocket-ui.md)): no Streamlit / Gradio. React 18 + Vite + Zustand + WebSocket + virtualised grid + nginx-served thumbnails. Latency SLO: p95 end-to-end < 2 s, p50 < 900 ms.
 6. **Workflow** (resolved May 26, see [ADR-0009](../adr/ADR-0009-sdd-workflow.md) + [`CONTRIBUTING.md`](../../CONTRIBUTING.md)): **Spec-Driven Development**. Every code change traces to a SPEC; every irreversible decision is recorded as an ADR.
-7. **Dataset preview**: any way to access a sample of the AIC2026 data ahead of June 25? Ask HCMUS contacts. **Partial answer (2026-05-28)** via team-channel: organisers provide video + metadata (url, description, ...) + object detection + pre-extracted keyframes + pre-computed CLIP embeddings (the embeddings are reportedly low-quality, so we still compute our own). See [research-note 06](../research-notes/06-aic2026-dataset-shape.md) for the full intel and the six follow-up data-shape questions to validate post-June-25.
+7. **Dataset release validation**: on June 25, validate the six follow-up
+   data-shape questions in [research-note 06](../research-notes/06-aic2026-dataset-shape.md)
+   and update SPEC-0003 before writing importer code.
 8. **TRAKE in 2026?**: not confirmed yet that TRAKE remains a task in 2026; design for it but keep the rest task-agnostic.
-9. **Operator candidates**: identify the 2 operators by June 1 and start their practice schedule. Natural candidate: [`ThanhToan2111`](https://github.com/ThanhToan2111) (current team member, author of the 2025 baseline) — has the most operator-side experience with DRES and the AIC HCMC venue.
-10. **Interview with the 2025 baseline author** (now confirmed team member): 30-minute agenda bundled in [`docs/permissions/2025-baseline-reuse.md`](../permissions/2025-baseline-reuse.md) §4. Resolves 10 currently-open questions across research-note 05 and SPEC-0018 in a single call. Schedule this week.
+9. **Operator candidates and drills**: identify the 2 operators immediately and
+   start practice as soon as the React MVP can search and submit. Natural
+   candidate: [`ThanhToan2111`](https://github.com/ThanhToan2111) (current team
+   member, author of the 2025 baseline) has the most operator-side experience
+   with DRES and the AIC HCMC venue.
+10. **2025 baseline interview**: the agenda in [`docs/permissions/2025-baseline-reuse.md`](../permissions/2025-baseline-reuse.md)
+    remains high leverage for SPEC-0018 and UI/operator lessons; schedule it
+    before DRES integration work.
